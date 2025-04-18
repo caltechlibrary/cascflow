@@ -1,0 +1,14 @@
+[project]
+name = "cascflow"
+version = "0.1.0"
+description = "Caltech Archives Workflow Library"
+readme = "README.md"
+authors = [
+    { name = "Tommy Keswick", email = "t4k@users.noreply.github.com" }
+]
+requires-python = ">=3.13"
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
