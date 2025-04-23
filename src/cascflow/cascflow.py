@@ -23,7 +23,6 @@ def setup_logging(config_file='logging.conf'):
         try:
             config.read(config_file)
             logging.config.fileConfig(config_file)
-            print(f"LOGGING CONFIGURED USING {config_file}")
         except Exception as e:
             print(f"ERROR READING {config_file}: {e}")
             fallback_logging()
