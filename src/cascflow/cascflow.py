@@ -194,6 +194,7 @@ def validate(source_volume, pipeline=None, **kwargs):
         logger.error(message)
         raise FileNotFoundError(message)
     if invalid_archival_objects:
+        logger.debug(f"🐞 INVALID_ARCHIVAL_OBJECTS: {invalid_archival_objects}")
         message = "❌ INVALID ARCHIVAL OBJECTS FOUND"
         logger.error(message)
         for invalid_archival_object in invalid_archival_objects:
