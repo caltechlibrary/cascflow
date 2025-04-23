@@ -115,6 +115,7 @@ def is_archival_object_valid(component_id, pipeline=None, **kwargs):
         if call_is_archival_object_valid_for_publication:
             if call_is_archival_object_valid_for_publication(archival_object, **kwargs):
                 logger.info(f"☑️ ARCHIVAL OBJECT VALID FOR PUBLICATION: {component_id}")
+                return True
             else:
                 message = "❌ ARCHIVAL OBJECT NOT VALID FOR PUBLICATION: [**{}**]({}/resolve/readonly?uri={})".format(
                     archival_object["title"],
@@ -125,6 +126,7 @@ def is_archival_object_valid(component_id, pipeline=None, **kwargs):
                 return False
         else:
             logger.info(f"☑️ ARCHIVAL OBJECT VALID FOR PUBLICATION: {component_id}")
+            return True
     else:
         ## no need to check more conditions
         return True
@@ -194,7 +196,6 @@ def validate(source_volume, pipeline=None, **kwargs):
         logger.error(message)
         raise FileNotFoundError(message)
     if invalid_archival_objects:
-        logger.debug(f"🐞 INVALID_ARCHIVAL_OBJECTS: {invalid_archival_objects}")
         message = "❌ INVALID ARCHIVAL OBJECTS FOUND"
         logger.error(message)
         for invalid_archival_object in invalid_archival_objects:
