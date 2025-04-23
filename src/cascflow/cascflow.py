@@ -1,5 +1,7 @@
+import configparser
 import http
 import logging
+import logging.config
 
 from pathlib import Path
 
@@ -13,10 +15,6 @@ from decouple import config, Csv
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
-import logging
-import logging.config
-from pathlib import Path
-import configparser
 
 def setup_logging(config_file='logging.conf'):
     config_path = Path(config_file)

@@ -1,13 +1,19 @@
 [project]
 name = "cascflow"
-version = "0.2.0"
+version = "0.2.1"
 description = "Caltech Archives Workflow Library"
 readme = "README.md"
 authors = [
     { name = "Tommy Keswick", email = "t4k@users.noreply.github.com" }
 ]
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "archivessnake>=0.10.1",
+    "backoff>=2.2.1",
+    "python-decouple>=3.8",
+    "requests>=2.32.3",
+    "urllib3>=2.4.0",
+]
 
 [build-system]
 requires = ["hatchling"]
