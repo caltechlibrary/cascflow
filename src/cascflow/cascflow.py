@@ -119,7 +119,7 @@ def is_archival_object_valid(component_id, pipeline=None, **kwargs):
             else:
                 message = "❌ ARCHIVAL OBJECT NOT VALID FOR PUBLICATION: [**{}**]({}/resolve/readonly?uri={})".format(
                     archival_object["title"],
-                    config("ASPACE_STAFF_URL"),
+                    config("ARCHIVESSPACE_STAFF_URL"),
                     archival_object["uri"],
                 )
                 logger.error(message)
