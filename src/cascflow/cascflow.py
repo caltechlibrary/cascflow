@@ -122,8 +122,8 @@ def validate(source_volume: str) -> tuple:
 
     establish_archivesspace_connection()
 
-    valid_archival_objects = []
-    invalid_archival_objects = []
+    eligible_archival_objects = []
+    ineligible_archival_objects = []
     nested_directories = []
     empty_directories = []
     file_count = 0  ## TBD store a list of files instead of only a count?
@@ -133,9 +133,9 @@ def validate(source_volume: str) -> tuple:
     for entry in source_path.iterdir():
         ## validate the entry (file or directory)
         if find_archival_object(entry.stem):
-            valid_archival_objects.append(entry.stem)
+            eligible_archival_objects.append(entry.stem)
         else:
-            invalid_archival_objects.append(entry.stem)
+            ineligible_archival_objects.append(entry.stem)
         ## count files in the root directory
         if entry.is_file():
             file_count += 1
@@ -150,8 +150,8 @@ def validate(source_volume: str) -> tuple:
                     file_count += 1
     return {
         "source_path": source_path,
-        "valid_archival_objects": valid_archival_objects,
-        "invalid_archival_objects": invalid_archival_objects,
+        "eligible_archival_objects": eligible_archival_objects,
+        "ineligible_archival_objects": ineligible_archival_objects,
         "nested_directories": nested_directories,
         "empty_directories": empty_directories,
         "file_count": file_count,
