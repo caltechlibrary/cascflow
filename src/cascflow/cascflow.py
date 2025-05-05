@@ -53,18 +53,6 @@ def establish_archivesspace_connection():
     logger.debug(f'🐞 CONNECTION TO ARCHIVESSPACE ESTABLISHED: {config("ARCHIVESSPACE_API_URL")}')
     return
 
-call_is_publication_file_supported = None
-def register_publication_supported_file_checker(callback):
-    global call_is_publication_file_supported
-    call_is_publication_file_supported = callback
-    return callback
-
-call_is_archival_object_valid_for_publication = None
-def register_archival_object_valid_for_publication_checker(callback):
-    global call_is_archival_object_valid_for_publication
-    call_is_archival_object_valid_for_publication = callback
-    return callback
-
 @backoff.on_exception(
     backoff.expo,
     (
@@ -106,41 +94,30 @@ def find_archival_object(component_id):
         logger.info(f"☑️ ARCHIVAL OBJECT FOUND: {component_id}")
         return archival_object
 
-def is_archival_object_valid(component_id, pipeline=None, **kwargs):
-    try:
-        archival_object = find_archival_object(component_id)
-    except Exception as e:
-        logger.exception(e)
-    if pipeline == "publication":
-        if call_is_archival_object_valid_for_publication:
-            if call_is_archival_object_valid_for_publication(archival_object, **kwargs):
-                logger.info(f"☑️ ARCHIVAL OBJECT VALID FOR PUBLICATION: {component_id}")
-                return True
-            else:
-                message = "❌ ARCHIVAL OBJECT NOT VALID FOR PUBLICATION: [**{}**]({}/resolve/readonly?uri={})".format(
-                    archival_object["title"],
-                    config("ARCHIVESSPACE_STAFF_URL"),
-                    archival_object["uri"],
-                )
-                logger.error(message)
-                return False
-        else:
-            logger.info(f"☑️ ARCHIVAL OBJECT VALID FOR PUBLICATION: {component_id}")
-            return True
-    else:
-        ## no need to check more conditions
-        return True
-
 def validate_source_path(source_volume):
-    SOURCE_PATH = Path(config("COMMON_MOUNT_PARENT_PATH")).joinpath(source_volume, config("COMMON_SOURCE_PATH"))
-    if not SOURCE_PATH.resolve().exists():
-        raise FileNotFoundError(f"SOURCE PATH '{SOURCE_PATH}' DOES NOT EXIST.")
-    return SOURCE_PATH
+    source_path = Path(config("COMMON_MOUNT_PARENT_PATH")).joinpath(source_volume, config("COMMON_SOURCE_PATH"))
+    if not source_path.resolve().exists():
+        raise FileNotFoundError(f"❌ SOURCE PATH '{source_path}' DOES NOT EXIST.")
+    return source_path
 
-def validate(source_volume, pipeline=None, **kwargs):
+def delete_files_to_remove(parent_path: Path):
+    """Delete any files in the parent path that are listed in FILES_TO_REMOVE."""
+    for f in parent_path.glob("**/*"):
+        if f.is_file() and f.name in config("FILES_TO_REMOVE", default=None, cast=Csv()):
+            f.unlink()
+    return
+
+def inspect_entry_directory(entry: Path, nested_directories: list, empty_directories: list) -> tuple:
+    if any(child.is_dir() for child in entry.iterdir()):
+        nested_directories.append(entry)
+    if not any(child.is_file() for child in entry.iterdir()):
+        empty_directories.append(entry)
+    return nested_directories, empty_directories
+
+def validate(source_volume: str) -> tuple:
     logger.debug(f"🐞 SOURCE_VOLUME: {source_volume}")
 
-    if (SOURCE_PATH := Path(validate_source_path(source_volume))):
+    if (source_path := Path(validate_source_path(source_volume))):
         logger.info(f"☑️ VALID SOURCE_VOLUME: {source_volume}")
 
     establish_archivesspace_connection()
@@ -149,73 +126,33 @@ def validate(source_volume, pipeline=None, **kwargs):
     invalid_archival_objects = []
     nested_directories = []
     empty_directories = []
-    file_count = 0  # TBD store a list of files instead of only a count?
-    unsupported_files = []
-    logger.debug(f"🐞 SOURCE_PATH: {SOURCE_PATH}")
-    ## delete any FILES_TO_REMOVE
-    for f in SOURCE_PATH.glob("**/*"):
-        if f.is_file() and f.name in config("FILES_TO_REMOVE", default=None, cast=Csv()):
-            f.unlink()
+    file_count = 0  ## TBD store a list of files instead of only a count?
+    logger.debug(f"🐞 SOURCE_PATH: {source_path}")
+    delete_files_to_remove(source_path)
     ## iterate over the first level of entries in the source directory
-    for entry in SOURCE_PATH.iterdir():
+    for entry in source_path.iterdir():
         ## validate the entry (file or directory)
-        if is_archival_object_valid(entry.stem, pipeline, **kwargs):
+        if find_archival_object(entry.stem):
             valid_archival_objects.append(entry.stem)
         else:
             invalid_archival_objects.append(entry.stem)
         ## count files in the root directory
         if entry.is_file():
             file_count += 1
-            ## check for file types that are unsupported in publication
-            if pipeline == 'publication' and call_is_publication_file_supported:
-                if call_is_publication_file_supported(entry):
-                    unsupported_files.append(entry)
         ## ensure directories do not contain subdirectories
         if entry.is_dir():
-            if any(child.is_dir() for child in entry.iterdir()):
-                nested_directories.append(entry)
-            if not any(child.is_file() for child in entry.iterdir()):
-                empty_directories.append(entry)
+            inspection_nested, inspection_empty = inspect_entry_directory(entry)
+            nested_directories.extend(inspection_nested)
+            empty_directories.extend(inspection_empty)
             ## count files in the child directory
             for child in entry.iterdir():
                 if child.is_file():
                     file_count += 1
-                    ## check for file types that are unsupported in publication
-                    if pipeline == 'publication' and call_is_publication_file_supported:
-                        if call_is_publication_file_supported(entry):
-                            unsupported_files.append(entry)
-    ## messaging
-    if valid_archival_objects:
-        for valid_archival_object in valid_archival_objects:
-            logger.info(f"🉑 {valid_archival_object}")
-        logger.info(f"🗂 ARCHIVAL OBJECT COUNT: {len(valid_archival_objects)}")
-        logger.info(f"📄 FILE COUNT: {file_count}")
-    ## validation and messaging
-    if file_count == 0:
-        message = "❌ NO FILES FOUND"
-        logger.error(message)
-        raise FileNotFoundError(message)
-    if invalid_archival_objects:
-        message = "❌ INVALID ARCHIVAL OBJECTS FOUND"
-        logger.error(message)
-        for invalid_archival_object in invalid_archival_objects:
-            logger.error(f"❌ {invalid_archival_object}")
-        raise RuntimeError(message)
-    if nested_directories:
-        message = "❌ NESTED DIRECTORIES FOUND"
-        logger.error(message)
-        for nested_directory in nested_directories:
-            logger.error(f"❌ {nested_directory}")
-        raise RuntimeError(message)
-    if empty_directories:
-        message = "❌ EMPTY DIRECTORIES FOUND"
-        logger.error(message)
-        for empty_directory in empty_directories:
-            logger.error(f"❌ {empty_directory}")
-        raise RuntimeError(message)
-    if unsupported_files:
-        message = "❌ UNSUPPORTED FILE TYPES FOUND"
-        logger.error(message)
-        for unsupported_file in unsupported_files:
-            logger.error(f"❌ {unsupported_file}")
-        raise RuntimeError(message)
+    return {
+        "source_path": source_path,
+        "valid_archival_objects": valid_archival_objects,
+        "invalid_archival_objects": invalid_archival_objects,
+        "nested_directories": nested_directories,
+        "empty_directories": empty_directories,
+        "file_count": file_count,
+    }
