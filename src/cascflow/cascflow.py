@@ -141,7 +141,7 @@ def validate(source_volume: str) -> tuple:
             file_count += 1
         ## ensure directories do not contain subdirectories
         if entry.is_dir():
-            inspection_nested, inspection_empty = inspect_entry_directory(entry)
+            inspection_nested, inspection_empty = inspect_entry_directory(entry, nested_directories, empty_directories)
             nested_directories.extend(inspection_nested)
             empty_directories.extend(inspection_empty)
             ## count files in the child directory
