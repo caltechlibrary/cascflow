@@ -9,8 +9,8 @@ import backoff
 import requests
 import urllib3
 
-from asnake.client import ASnakeClient
-from decouple import config, Csv
+from asnake.client import ASnakeClient  # pypi: ArchivesSnake
+from decouple import config, Csv  # pypi: python-decouple
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
