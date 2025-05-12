@@ -238,6 +238,7 @@ def get_arrangement(archival_object):
 
 
 def execute(source_volume: str, batch_set_id: str, pipeline=None, **kwargs):
+    establish_archivesspace_connection()
     batch_directory = initialize_batch_directory(source_volume, batch_set_id, pipeline)
     ## delete any FILES_TO_REMOVE
     for f in batch_directory.glob("**/*"):
