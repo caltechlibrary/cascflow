@@ -147,7 +147,9 @@ def create_digital_object(archival_object, digital_object_type=""):
 
 def initialize_batch_directory(source_volume, batch_set_id, pipeline):
     source_path = Path(config("COMMON_MOUNT_PARENT_PATH")).joinpath(source_volume, config("COMMON_SOURCE_PATH"))
+    logger.debug(f"🐞 SOURCE_PATH: {source_path}")
     batch_directory = Path(config("COMMON_MOUNT_PARENT_PATH")).joinpath(source_volume, config("BATCH_SETS_DIRECTORY"), batch_set_id, pipeline)
+    logger.debug(f"🐞 BATCH_DIRECTORY: {batch_directory}")
     batch_directory.mkdir(parents=True, exist_ok=True)
     Path(source_path).rename(batch_directory.joinpath("STAGE_1_INITIAL"))
     batch_directory.joinpath("STAGE_2_WORKING").mkdir(parents=True, exist_ok=True)
@@ -157,11 +159,15 @@ def initialize_batch_directory(source_volume, batch_set_id, pipeline):
 
 def move_to_stage_2(path_obj: Path, batch_directory: Path):
     """Move the path object to the STAGE_2_WORKING directory."""
+    logger.debug(f"🐞 PATH_OBJ: {path_obj}")
+    logger.debug(f"🐞 BATCH_DIRECTORY: {batch_directory}")
     return path_obj.rename(batch_directory.joinpath("STAGE_2_WORKING").joinpath(path_obj.name))
 
 
 def move_to_stage_3(path_obj: Path, batch_directory: Path):
     """Move the path object to the STAGE_3_COMPLETE directory."""
+    logger.debug(f"🐞 PATH_OBJ: {path_obj}")
+    logger.debug(f"🐞 BATCH_DIRECTORY: {batch_directory}")
     return path_obj.rename(batch_directory.joinpath("STAGE_3_COMPLETE").joinpath(path_obj.name))
 
 
