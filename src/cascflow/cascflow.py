@@ -146,9 +146,9 @@ def create_digital_object(archival_object, digital_object_type=""):
 
 
 def initialize_batch_directory(source_volume, batch_set_id, pipeline):
-    source_path = Path(config("COMMON_MOUNT_PARENT_PATH")).joinpath(source_volume, config("COMMON_SOURCE_PATH"))
+    source_path = Path(config("ABSOLUTE_MOUNT_PARENT")).joinpath(source_volume, config("RELATIVE_SOURCE_DIRECTORY"))
     logger.debug(f"🐞 SOURCE_PATH: {source_path}")
-    batch_directory = Path(config("COMMON_MOUNT_PARENT_PATH")).joinpath(source_volume, config("BATCH_SETS_DIRECTORY"), batch_set_id, pipeline)
+    batch_directory = Path(config("ABSOLUTE_MOUNT_PARENT")).joinpath(source_volume, config("RELATIVE_BATCH_DIRECTORY"), batch_set_id, pipeline)
     logger.debug(f"🐞 BATCH_DIRECTORY: {batch_directory}")
     batch_directory.mkdir(parents=True, exist_ok=True)
     Path(source_path).rename(batch_directory.joinpath("STAGE_1_INITIAL"))
@@ -333,7 +333,7 @@ def find_archival_object(component_id):
         return archival_object
 
 def validate_source_path(source_volume):
-    source_path = Path(config("COMMON_MOUNT_PARENT_PATH")).joinpath(source_volume, config("COMMON_SOURCE_PATH"))
+    source_path = Path(config("ABSOLUTE_MOUNT_PARENT")).joinpath(source_volume, config("RELATIVE_SOURCE_DIRECTORY"))
     if not source_path.resolve().exists():
         raise FileNotFoundError(f"❌ SOURCE PATH '{source_path}' DOES NOT EXIST.")
     return source_path
