@@ -6,6 +6,7 @@ import logging.config
 from pathlib import Path
 
 import backoff
+import boto3
 import requests
 import urllib3
 
@@ -276,6 +277,17 @@ def establish_archivesspace_connection():
     logger.debug(f'🐞 CONNECTION TO ARCHIVESSPACE ESTABLISHED: {config("ARCHIVESSPACE_API_URL")}')
     return
 
+s3_client = None
+def establish_s3_connection():
+    global s3_client
+    s3_client = boto3.client(
+        "s3",
+        aws_access_key_id=config("DISTILLERY_AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=config("DISTILLERY_AWS_SECRET_ACCESS_KEY"),
+    )
+    logger.debug(f'🐞 CONNECTION TO S3 ESTABLISHED: {config("ALCHEMIST_BUCKET")}')
+    return
+
 @backoff.on_exception(
     backoff.expo,
     (
@@ -287,8 +299,11 @@ def establish_archivesspace_connection():
     ),
     max_time=1800,
 )
-def archivessnake_get(uri):
-    return asnake_client.get(uri)
+def archivessnake_get(uri, params=None):
+    if params:
+        return asnake_client.get(uri, params=params)
+    else:
+        return asnake_client.get(uri)
 
 @backoff.on_exception(
     backoff.expo,
@@ -332,8 +347,84 @@ def find_archival_object(component_id):
         logger.info(f"☑️ ARCHIVAL OBJECT FOUND: {component_id}")
         return archival_object
 
-def validate_source_path(source_volume):
-    source_path = Path(config("ABSOLUTE_MOUNT_PARENT")).joinpath(source_volume, config("RELATIVE_SOURCE_DIRECTORY"))
+
+def get_s3_resource_archival_object_paths(resource_id: str):
+    """
+    Get a list of S3 paths for archival objects under a given resource prefix.
+
+    Args:
+        resource_id (str): The ArchivesSpace identifier for the resource.
+
+    Returns:
+        list: A list of S3 paths for archival objects.
+    """
+    paginator = s3_client.get_paginator("list_objects_v2")
+    archival_object_prefixes = []
+    for result in paginator.paginate(
+        Bucket=config("ALCHEMIST_BUCKET"),
+        Delimiter="/",
+        Prefix=f'{config("ALCHEMIST_URL_PREFIX")}/{resource_id}/',
+    ):
+        for prefix in result.get("CommonPrefixes"):
+            # store collection_id/component_id/
+            archival_object_prefixes.append(prefix.get("Prefix"))
+    return archival_object_prefixes
+
+
+def validate_metadata_identifier(identifier: str):
+    """
+    Validate an archival object or published archival objects under a resource.
+
+    This function checks if the identifier corresponds to a valid archival object
+    or resource in ArchivesSpace. It raises a ValueError if the identifier is not found
+    or if multiple objects are found.
+
+    NOTE: Caltech Archives policy is to only use the `id_0` field for identifiers.
+
+    Args:
+        identifier (str): The identifier for the archival object or resource.
+
+    Returns:
+        tuple: Lists of eligible and ineligible archival objects.
+
+    Raises:
+        ValueError: If no archival object is found or if multiple objects are found.
+    """
+    # TODO set Repository ID in config
+    find_resources_identifier_response = archivessnake_get(
+        f'/repositories/2/find_by_id/resources?identifier[]=["{identifier}"]',)
+    find_archival_object_component_id_response = archivessnake_get(
+        f"/repositories/2/find_by_id/archival_objects?component_id[]={identifier}")
+    eligible_archival_objects = []
+    ineligible_archival_objects = []
+    if len(find_resources_identifier_response.json()["resources"]) == 1 and len(find_archival_object_component_id_response.json()["archival_objects"]) < 1:
+        # 👋 WE HAVE A RESOURCE
+        # get the _published_ archival objects under this resource from s3
+        # TODO figure out parsing of identifier segments based on policy
+        component_identifiers = [p.split("/")[-2] for p in get_s3_resource_archival_object_paths(identifier)]
+        # TODO loop over all archival objects under this resource
+        for component_id in component_identifiers:
+            if find_archival_object(component_id):
+                eligible_archival_objects.append(component_id)
+            else:
+                ineligible_archival_objects.append(component_id)
+        return {
+            "eligible_archival_objects": eligible_archival_objects,
+            "ineligible_archival_objects": ineligible_archival_objects,
+        }
+    elif len(find_resources_identifier_response.json()["resources"]) < 1:
+        if find_archival_object(identifier):
+            eligible_archival_objects.append(identifier)
+        else:
+            ineligible_archival_objects.append(identifier)
+        return {
+            "eligible_archival_objects": eligible_archival_objects,
+            "ineligible_archival_objects": ineligible_archival_objects,
+        }
+
+
+def validate_source_path(volume_name: str):
+    source_path = Path(config("ABSOLUTE_MOUNT_PARENT")).joinpath(volume_name, config("RELATIVE_SOURCE_DIRECTORY"))
     if not source_path.resolve().exists():
         raise FileNotFoundError(f"❌ SOURCE PATH '{source_path}' DOES NOT EXIST.")
     return source_path
@@ -352,13 +443,61 @@ def inspect_entry_directory(entry: Path, nested_directories: list, empty_directo
         empty_directories.append(entry)
     return nested_directories, empty_directories
 
-def validate(source_volume: str) -> tuple:
-    logger.debug(f"🐞 SOURCE_VOLUME: {source_volume}")
+def validate_digital_files(context: str) -> dict:
+    """
+    Validate the contents of a source directory and metadata for archival objects.
 
-    if (source_path := Path(validate_source_path(source_volume))):
-        logger.info(f"☑️ VALID SOURCE_VOLUME: {source_volume}")
+    This function performs validation based on the specified `target` type and `context`.
+    It connects to the ArchivesSpace API to validate archival objects and inspects
+    the directory structure and files in the source path for compliance with expected
+    criteria.
+
+    Args:
+        context (str): The context for validation. For "metadata", this is the identifier
+            for an archival object or resource. For "publication" or "files", this is the
+            name of the source volume to validate.
+
+    Returns:
+        dict: A dictionary containing the results of the validation. Keys include:
+            - "source_path" (Path): The resolved source path.
+            - "eligible_archival_objects" (list): A list of archival object identifiers
+              that passed validation.
+            - "ineligible_archival_objects" (list): A list of archival object identifiers
+              that failed validation.
+            - "nested_directories" (list): A list of directories containing subdirectories.
+            - "empty_directories" (list): A list of directories that are empty.
+            - "file_count" (int): The total number of files in the source path and its
+              subdirectories.
+
+    Raises:
+        FileNotFoundError: If the source path does not exist.
+        ValueError: If an archival object is not found or multiple objects are found
+            for a given identifier.
+        Exception: For unexpected errors during validation.
+
+    Notes:
+        - For "metadata", the function currently uses `find_archival_object()` to validate
+          archival objects and checks S3 bucket prefixes for resources.
+        - For "publication" or "files", the function validates the directory structure,
+          removes unwanted files listed in `FILES_TO_REMOVE`, and ensures directories
+          do not contain subdirectories.
+
+    Example:
+        >>> validate("files", "source_volume_name")
+        {
+            "source_path": PosixPath("/path/to/source"),
+            "eligible_archival_objects": ["obj1", "obj2"],
+            "ineligible_archival_objects": ["obj3"],
+            "nested_directories": [PosixPath("/path/to/source/nested_dir")],
+            "empty_directories": [PosixPath("/path/to/source/empty_dir")],
+            "file_count": 42,
+        }
+    """
+    logger.debug(f"🐞 CONTEXT: {context}")
 
     establish_archivesspace_connection()
+
+    source_path = validate_source_path(context)
 
     eligible_archival_objects = []
     ineligible_archival_objects = []
@@ -370,10 +509,14 @@ def validate(source_volume: str) -> tuple:
     ## iterate over the first level of entries in the source directory
     for entry in source_path.iterdir():
         ## validate the entry (file or directory)
-        if find_archival_object(entry.stem):
-            eligible_archival_objects.append(entry.stem)
-        else:
-            ineligible_archival_objects.append(entry.stem)
+        eligible_archival_objects.extend(
+            validate_metadata_identifier(entry.stem)
+            .get("eligible_archival_objects", [])
+        )
+        ineligible_archival_objects.extend(
+            validate_metadata_identifier(entry.stem)
+            .get("ineligible_archival_objects", [])
+        )
         ## count files in the root directory
         if entry.is_file():
             file_count += 1
