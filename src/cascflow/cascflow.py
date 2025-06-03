@@ -389,24 +389,38 @@ def get_s3_resource_archival_object_paths(resource_id: str):
     return archival_object_prefixes
 
 
-def validate_metadata_identifier(identifier: str):
+def parse_metadata_identifier(identifier: str):
     """
-    Validate an archival object or published archival objects under a resource.
+    Determines whether the provided identifier corresponds to a resource or an archival object in ArchivesSpace,
+    and validates the existence of eligible archival objects under that identifier.
 
-    This function checks if the identifier corresponds to a valid archival object
-    or resource in ArchivesSpace. It raises a ValueError if the identifier is not found
-    or if multiple objects are found.
+    This function:
+    - Checks if the identifier matches a resource (`id_0`) in ArchivesSpace.
+    - If it is a resource, retrieves all published archival objects under that resource from S3 and validates each one.
+    - If it is not a resource, checks if the identifier matches an archival object (`component_id`) in ArchivesSpace.
+    - Returns lists of eligible and ineligible archival objects based on their existence in ArchivesSpace.
 
-    NOTE: Caltech Archives policy is to only use the `id_0` field for identifiers.
+    Caltech Archives policy is to only use the `id_0` field for resource identifiers.
 
     Args:
-        identifier (str): The identifier for the archival object or resource.
+        identifier (str): The identifier for a resource or archival object.
 
     Returns:
-        tuple: Lists of eligible and ineligible archival objects.
+        dict: A dictionary with the following keys:
+            - "identifier_level" (str): Either "resource" or "archival_object".
+            - "eligible_archival_objects" (list): Identifiers of archival objects that exist in ArchivesSpace.
+            - "ineligible_archival_objects" (list): Identifiers of archival objects that do not exist in ArchivesSpace.
 
     Raises:
-        ValueError: If no archival object is found or if multiple objects are found.
+        ValueError: If the identifier does not correspond to a valid resource or archival object.
+
+    Example:
+        >>> parse_metadata_identifier("12345")
+        {
+            "identifier_level": "resource",
+            "eligible_archival_objects": ["67890", "54321"],
+            "ineligible_archival_objects": ["11111"]
+        }
     """
     # TODO set Repository ID in config
     find_resources_identifier_response = archivessnake_get(
@@ -417,16 +431,15 @@ def validate_metadata_identifier(identifier: str):
     ineligible_archival_objects = []
     if len(find_resources_identifier_response.json()["resources"]) == 1 and len(find_archival_object_component_id_response.json()["archival_objects"]) < 1:
         # 👋 WE HAVE A RESOURCE
-        # get the _published_ archival objects under this resource from s3
-        # TODO figure out parsing of identifier segments based on policy
+        # get the *PUBLISHED* archival objects under this resource from S3 (anything in S3 is published)
         component_identifiers = [p.split("/")[-2] for p in get_s3_resource_archival_object_paths(identifier)]
-        # TODO loop over all archival objects under this resource
         for component_id in component_identifiers:
             if find_archival_object(component_id):
                 eligible_archival_objects.append(component_id)
             else:
                 ineligible_archival_objects.append(component_id)
         return {
+            "identifier_level": "resource",
             "eligible_archival_objects": eligible_archival_objects,
             "ineligible_archival_objects": ineligible_archival_objects,
         }
@@ -436,6 +449,7 @@ def validate_metadata_identifier(identifier: str):
         else:
             ineligible_archival_objects.append(identifier)
         return {
+            "identifier_level": "archival_object",
             "eligible_archival_objects": eligible_archival_objects,
             "ineligible_archival_objects": ineligible_archival_objects,
         }
@@ -526,11 +540,11 @@ def validate_digital_files(context: str) -> dict:
     for entry in source_path.iterdir():
         ## validate the entry (file or directory)
         eligible_archival_objects.extend(
-            validate_metadata_identifier(entry.stem)
+            parse_metadata_identifier(entry.stem)
             .get("eligible_archival_objects", [])
         )
         ineligible_archival_objects.extend(
-            validate_metadata_identifier(entry.stem)
+            parse_metadata_identifier(entry.stem)
             .get("ineligible_archival_objects", [])
         )
         ## count files in the root directory
