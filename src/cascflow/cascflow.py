@@ -245,7 +245,6 @@ def get_arrangement(archival_object):
 
 
 def execute(source_volume: str, batch_set_id: str, pipeline=None, **kwargs):
-    establish_archivesspace_connection()
     batch_directory = initialize_batch_directory(source_volume, batch_set_id, pipeline)
     ## delete any FILES_TO_REMOVE
     for f in batch_directory.glob("**/*"):
@@ -265,6 +264,14 @@ def execute(source_volume: str, batch_set_id: str, pipeline=None, **kwargs):
         yield filepaths, archival_object, arrangement
 
 asnake_client = None
+def ensure_archivesspace_connection(func):
+    """Decorator to ensure archivesspace connection is established before function call."""
+    def wrapper(*args, **kwargs):
+        global asnake_client
+        if asnake_client is None:
+            establish_archivesspace_connection()
+        return func(*args, **kwargs)
+    return wrapper
 def establish_archivesspace_connection():
     global asnake_client
     asnake_client = ASnakeClient(
@@ -278,6 +285,14 @@ def establish_archivesspace_connection():
     return
 
 s3_client = None
+def ensure_s3_connection(func):
+    """Decorator to ensure S3 connection is established before function call."""
+    def wrapper(*args, **kwargs):
+        global s3_client
+        if s3_client is None:
+            establish_s3_connection()
+        return func(*args, **kwargs)
+    return wrapper
 def establish_s3_connection():
     global s3_client
     s3_client = boto3.client(
@@ -299,6 +314,7 @@ def establish_s3_connection():
     ),
     max_time=1800,
 )
+@ensure_archivesspace_connection
 def archivessnake_get(uri, params=None):
     if params:
         return asnake_client.get(uri, params=params)
@@ -316,6 +332,7 @@ def archivessnake_get(uri, params=None):
     ),
     max_time=1800,
 )
+@ensure_archivesspace_connection
 def archivessnake_post(uri, object):
     return asnake_client.post(uri, json=object)
 
@@ -348,6 +365,7 @@ def find_archival_object(component_id):
         return archival_object
 
 
+@ensure_s3_connection
 def get_s3_resource_archival_object_paths(resource_id: str):
     """
     Get a list of S3 paths for archival objects under a given resource prefix.
@@ -494,8 +512,6 @@ def validate_digital_files(context: str) -> dict:
         }
     """
     logger.debug(f"🐞 CONTEXT: {context}")
-
-    establish_archivesspace_connection()
 
     source_path = validate_source_path(context)
 
