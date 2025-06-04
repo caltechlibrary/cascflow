@@ -10,7 +10,7 @@ requires-python = ">=3.13"
 dependencies = [
     "archivessnake>=0.10.1",
     "backoff>=2.2.1",
-    "boto3>=1.38.25",
+    "boto3>=1.38.29",
     "python-decouple>=3.8",
     "requests>=2.32.3",
     "urllib3>=2.4.0",
