@@ -303,6 +303,21 @@ def establish_s3_connection():
     logger.debug(f'🐞 CONNECTION TO S3 ESTABLISHED: {config("ALCHEMIST_BUCKET")}')
     return
 
+
+@ensure_s3_connection
+def s3_get_object(bucket, key):
+    """Get an object from S3."""
+    try:
+        response = s3_client.get_object(Bucket=bucket, Key=key)
+        return response
+    except s3_client.exceptions.NoSuchKey:
+        logger.error(f"❌ OBJECT NOT FOUND: {key} in {bucket}")
+        return None
+    except Exception as e:
+        logger.error(f"❌ ERROR GETTING OBJECT: {e}")
+        raise e
+
+
 @backoff.on_exception(
     backoff.expo,
     (
