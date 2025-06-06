@@ -244,7 +244,7 @@ def get_arrangement(archival_object):
         raise
 
 
-def execute(source_volume: str, batch_set_id: str, pipeline=None, **kwargs):
+def execute(source_volume: str, batch_set_id: str, pipeline: str):
     batch_directory = initialize_batch_directory(source_volume, batch_set_id, pipeline)
     ## delete any FILES_TO_REMOVE
     for f in batch_directory.glob("**/*"):
