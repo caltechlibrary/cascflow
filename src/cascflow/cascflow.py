@@ -261,7 +261,7 @@ def execute(source_volume: str, batch_set_id: str, pipeline: str):
             filepaths = [i for i in stage_2_path_obj.iterdir() if i.is_file()]
         else:
             filepaths = []
-        yield filepaths, archival_object, arrangement
+        yield batch_directory, stage_2_path_obj, filepaths, archival_object, arrangement
 
 asnake_client = None
 def ensure_archivesspace_connection(func):
@@ -315,6 +315,28 @@ def s3_get_object(bucket, key):
         return None
     except Exception as e:
         logger.error(f"❌ ERROR GETTING OBJECT: {e}")
+        raise e
+
+
+@ensure_s3_connection
+def s3_put_object(bucket: str, key: str, body = b""):
+    """Put an object to S3."""
+    try:
+        if not body:
+            response = s3_client.put_object(
+                Bucket=bucket,
+                Key=key,
+            )
+        else:
+            response = s3_client.put_object(
+                Bucket=bucket,
+                Key=key,
+                Body=body,
+            )
+        logger.info(f"☑️ OBJECT PUT TO S3: {bucket}/{key}")
+        return response
+    except Exception as e:
+        logger.error(f"❌ ERROR PUTTING OBJECT: {e}")
         raise e
 
 
