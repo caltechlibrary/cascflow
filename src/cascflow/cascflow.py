@@ -71,7 +71,7 @@ def save_digital_object_file_versions(archival_object, new_file_versions):
             digital_object = instance["digital_object"]["_resolved"]
             digital_object["file_versions"] = file_versions
             digital_object["publish"] = True
-            digital_object_post_response = update_digital_object(
+            update_digital_object(
                 digital_object["uri"], digital_object
             ).json()
 
