@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 
-def setup_logging(config_file='logging.conf'):
+def setup_logging(config_file="logging.conf"):
     config_path = Path(config_file)
     if config_path.exists():
         config = configparser.ConfigParser()
@@ -30,12 +30,14 @@ def setup_logging(config_file='logging.conf'):
     else:
         fallback_logging()
 
+
 def fallback_logging():
     logging.basicConfig(
         level=logging.DEBUG,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
     print("LOGGING CONFIGURED USING basicConfig FALLBACK")
+
 
 def update_digital_object(uri, data):
     # raises an HTTPError exception if unsuccessful
@@ -63,17 +65,15 @@ def save_digital_object_file_versions(archival_object, new_file_versions):
                 if existing_file_version["file_uri"] not in new_file_uri_values:
                     existing_file_version["publish"] = False
                     existing_file_version["is_representative"] = False
-                    new_file_uri_values[
-                        existing_file_version["file_uri"]
-                    ] = existing_file_version
+                    new_file_uri_values[existing_file_version["file_uri"]] = (
+                        existing_file_version
+                    )
             # discard keys and create list of unique file_version dictionaries
             file_versions = list(new_file_uri_values.values())
             digital_object = instance["digital_object"]["_resolved"]
             digital_object["file_versions"] = file_versions
             digital_object["publish"] = True
-            update_digital_object(
-                digital_object["uri"], digital_object
-            ).json()
+            update_digital_object(digital_object["uri"], digital_object).json()
 
 
 def create_digital_object(archival_object, digital_object_type=""):
@@ -147,9 +147,13 @@ def create_digital_object(archival_object, digital_object_type=""):
 
 
 def initialize_batch_directory(source_volume, batch_set_id, pipeline):
-    source_path = Path(config("ABSOLUTE_MOUNT_PARENT")).joinpath(source_volume, config("RELATIVE_SOURCE_DIRECTORY"))
+    source_path = Path(config("ABSOLUTE_MOUNT_PARENT")).joinpath(
+        source_volume, config("RELATIVE_SOURCE_DIRECTORY")
+    )
     logger.debug(f"🐞 SOURCE_PATH: {source_path}")
-    batch_directory = Path(config("ABSOLUTE_MOUNT_PARENT")).joinpath(source_volume, config("RELATIVE_BATCH_DIRECTORY"), f"{batch_set_id}--{pipeline}")
+    batch_directory = Path(config("ABSOLUTE_MOUNT_PARENT")).joinpath(
+        source_volume, config("RELATIVE_BATCH_DIRECTORY"), f"{batch_set_id}--{pipeline}"
+    )
     logger.debug(f"🐞 BATCH_DIRECTORY: {batch_directory}")
     batch_directory.mkdir(parents=True, exist_ok=True)
     Path(source_path).rename(batch_directory.joinpath("STAGE_1_INITIAL"))
@@ -158,18 +162,23 @@ def initialize_batch_directory(source_volume, batch_set_id, pipeline):
     Path(source_path).mkdir()
     return batch_directory
 
+
 def move_to_stage_2(path_obj: Path, batch_directory: Path):
     """Move the path object to the STAGE_2_WORKING directory."""
     logger.debug(f"🐞 PATH_OBJ: {path_obj}")
     logger.debug(f"🐞 BATCH_DIRECTORY: {batch_directory}")
-    return path_obj.rename(batch_directory.joinpath("STAGE_2_WORKING").joinpath(path_obj.name))
+    return path_obj.rename(
+        batch_directory.joinpath("STAGE_2_WORKING").joinpath(path_obj.name)
+    )
 
 
 def move_to_stage_3(path_obj: Path, batch_directory: Path):
     """Move the path object to the STAGE_3_COMPLETE directory."""
     logger.debug(f"🐞 PATH_OBJ: {path_obj}")
     logger.debug(f"🐞 BATCH_DIRECTORY: {batch_directory}")
-    return path_obj.rename(batch_directory.joinpath("STAGE_3_COMPLETE").joinpath(path_obj.name))
+    return path_obj.rename(
+        batch_directory.joinpath("STAGE_3_COMPLETE").joinpath(path_obj.name)
+    )
 
 
 def get_arrangement(archival_object):
@@ -248,10 +257,14 @@ def execute(source_volume: str, batch_set_id: str, pipeline: str):
     batch_directory = initialize_batch_directory(source_volume, batch_set_id, pipeline)
     ## delete any FILES_TO_REMOVE
     for f in batch_directory.glob("**/*"):
-        if f.is_file() and f.name in config("FILES_TO_REMOVE", default=None, cast=Csv()):
+        if f.is_file() and f.name in config(
+            "FILES_TO_REMOVE", default=None, cast=Csv()
+        ):
             f.unlink()
     ## THE LOOP THAT HAS EVERYTHING IN IT
-    for stage_1_path_obj in sorted(batch_directory.joinpath("STAGE_1_INITIAL").iterdir(), key=lambda obj: obj.name):
+    for stage_1_path_obj in sorted(
+        batch_directory.joinpath("STAGE_1_INITIAL").iterdir(), key=lambda obj: obj.name
+    ):
         archival_object = find_archival_object(stage_1_path_obj.stem)
         arrangement = get_arrangement(archival_object)
         stage_2_path_obj = move_to_stage_2(stage_1_path_obj, batch_directory)
@@ -263,15 +276,22 @@ def execute(source_volume: str, batch_set_id: str, pipeline: str):
             filepaths = []
         yield batch_directory, stage_2_path_obj, filepaths, archival_object, arrangement
 
+
 asnake_client = None
+
+
 def ensure_archivesspace_connection(func):
     """Decorator to ensure archivesspace connection is established before function call."""
+
     def wrapper(*args, **kwargs):
         global asnake_client
         if asnake_client is None:
             establish_archivesspace_connection()
         return func(*args, **kwargs)
+
     return wrapper
+
+
 def establish_archivesspace_connection():
     global asnake_client
     asnake_client = ASnakeClient(
@@ -281,18 +301,27 @@ def establish_archivesspace_connection():
     )
     logger.debug("🐞 ESTABLISHING A CONNECTION TO ARCHIVESSPACE")
     asnake_client.authorize()
-    logger.debug(f'🐞 CONNECTION TO ARCHIVESSPACE ESTABLISHED: {config("ARCHIVESSPACE_API_URL")}')
+    logger.debug(
+        f'🐞 CONNECTION TO ARCHIVESSPACE ESTABLISHED: {config("ARCHIVESSPACE_API_URL")}'
+    )
     return
 
+
 s3_client = None
+
+
 def ensure_s3_connection(func):
     """Decorator to ensure S3 connection is established before function call."""
+
     def wrapper(*args, **kwargs):
         global s3_client
         if s3_client is None:
             establish_s3_connection()
         return func(*args, **kwargs)
+
     return wrapper
+
+
 def establish_s3_connection():
     global s3_client
     s3_client = boto3.client(
@@ -319,7 +348,7 @@ def s3_get_object(bucket, key):
 
 
 @ensure_s3_connection
-def s3_put_object(bucket: str, key: str, body = b""):
+def s3_put_object(bucket: str, key: str, body=b""):
     """Put an object to S3."""
     try:
         if not body:
@@ -357,6 +386,7 @@ def archivessnake_get(uri, params=None):
         return asnake_client.get(uri, params=params)
     else:
         return asnake_client.get(uri)
+
 
 @backoff.on_exception(
     backoff.expo,
@@ -461,15 +491,23 @@ def parse_metadata_identifier(identifier: str):
     """
     # TODO set Repository ID in config
     find_resources_identifier_response = archivessnake_get(
-        f'/repositories/2/find_by_id/resources?identifier[]=["{identifier}"]',)
+        f'/repositories/2/find_by_id/resources?identifier[]=["{identifier}"]',
+    )
     find_archival_object_component_id_response = archivessnake_get(
-        f"/repositories/2/find_by_id/archival_objects?component_id[]={identifier}")
+        f"/repositories/2/find_by_id/archival_objects?component_id[]={identifier}"
+    )
     eligible_archival_objects = []
     ineligible_archival_objects = []
-    if len(find_resources_identifier_response.json()["resources"]) == 1 and len(find_archival_object_component_id_response.json()["archival_objects"]) < 1:
+    if (
+        len(find_resources_identifier_response.json()["resources"]) == 1
+        and len(find_archival_object_component_id_response.json()["archival_objects"])
+        < 1
+    ):
         # 👋 WE HAVE A RESOURCE
         # get the *PUBLISHED* archival objects under this resource from S3 (anything in S3 is published)
-        component_identifiers = [p.split("/")[-2] for p in get_s3_resource_archival_object_paths(identifier)]
+        component_identifiers = [
+            p.split("/")[-2] for p in get_s3_resource_archival_object_paths(identifier)
+        ]
         for component_id in component_identifiers:
             if find_archival_object(component_id):
                 eligible_archival_objects.append(component_id)
@@ -493,24 +531,33 @@ def parse_metadata_identifier(identifier: str):
 
 
 def validate_source_path(volume_name: str):
-    source_path = Path(config("ABSOLUTE_MOUNT_PARENT")).joinpath(volume_name, config("RELATIVE_SOURCE_DIRECTORY"))
+    source_path = Path(config("ABSOLUTE_MOUNT_PARENT")).joinpath(
+        volume_name, config("RELATIVE_SOURCE_DIRECTORY")
+    )
     if not source_path.resolve().exists():
         raise FileNotFoundError(f"❌ SOURCE PATH '{source_path}' DOES NOT EXIST.")
     return source_path
 
+
 def delete_files_to_remove(parent_path: Path):
     """Delete any files in the parent path that are listed in FILES_TO_REMOVE."""
     for f in parent_path.glob("**/*"):
-        if f.is_file() and f.name in config("FILES_TO_REMOVE", default=None, cast=Csv()):
+        if f.is_file() and f.name in config(
+            "FILES_TO_REMOVE", default=None, cast=Csv()
+        ):
             f.unlink()
     return
 
-def inspect_entry_directory(entry: Path, nested_directories: list, empty_directories: list) -> tuple:
+
+def inspect_entry_directory(
+    entry: Path, nested_directories: list, empty_directories: list
+) -> tuple:
     if any(child.is_dir() for child in entry.iterdir()):
         nested_directories.append(entry)
     if not any(child.is_file() for child in entry.iterdir()):
         empty_directories.append(entry)
     return nested_directories, empty_directories
+
 
 def validate_digital_files(context: str) -> dict:
     """
@@ -577,19 +624,19 @@ def validate_digital_files(context: str) -> dict:
     for entry in source_path.iterdir():
         ## validate the entry (file or directory)
         eligible_archival_objects.extend(
-            parse_metadata_identifier(entry.stem)
-            .get("eligible_archival_objects", [])
+            parse_metadata_identifier(entry.stem).get("eligible_archival_objects", [])
         )
         ineligible_archival_objects.extend(
-            parse_metadata_identifier(entry.stem)
-            .get("ineligible_archival_objects", [])
+            parse_metadata_identifier(entry.stem).get("ineligible_archival_objects", [])
         )
         ## count files in the root directory
         if entry.is_file():
             file_count += 1
         ## ensure directories do not contain subdirectories
         if entry.is_dir():
-            inspection_nested, inspection_empty = inspect_entry_directory(entry, nested_directories, empty_directories)
+            inspection_nested, inspection_empty = inspect_entry_directory(
+                entry, nested_directories, empty_directories
+            )
             nested_directories.extend(inspection_nested)
             empty_directories.extend(inspection_empty)
             ## count files in the child directory
