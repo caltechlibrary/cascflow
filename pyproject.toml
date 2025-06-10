@@ -1,10 +1,10 @@
 [project]
 name = "cascflow"
-version = "0.9.0"
-description = "Caltech Archives Workflow Library"
+version = "1.0.0"
+description = "Caltech Archives & Special Collections Workflow Library"
 readme = "README.md"
 authors = [
-    { name = "Tommy Keswick", email = "t4k@users.noreply.github.com" }
+    { name = "Tommy Keswick", email = "tkeswick@caltech.edu" }
 ]
 requires-python = ">=3.13"
 dependencies = [
