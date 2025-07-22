@@ -135,7 +135,7 @@ def create_digital_object(archival_object, digital_object_type=""):
         archival_object["uri"], archival_object
     )
     logger.info(
-        f'☑️  ARCHIVAL OBJECT UPDATED: {archival_object_post_response.json()["uri"]}'
+        f"☑️  ARCHIVAL OBJECT UPDATED: {archival_object_post_response.json()['uri']}"
     )
 
     # TODO investigate how to roll back adding digital object to archival object
@@ -302,7 +302,7 @@ def establish_archivesspace_connection():
     logger.debug("🐞 ESTABLISHING A CONNECTION TO ARCHIVESSPACE")
     asnake_client.authorize()
     logger.debug(
-        f'🐞 CONNECTION TO ARCHIVESSPACE ESTABLISHED: {config("ARCHIVESSPACE_API_URL")}'
+        f"🐞 CONNECTION TO ARCHIVESSPACE ESTABLISHED: {config('ARCHIVESSPACE_API_URL')}"
     )
     return
 
@@ -433,7 +433,9 @@ def find_archival_object(component_id):
 
 
 @ensure_s3_connection
-def get_s3_resource_archival_object_paths(resource_id: str, bucket: str = None, path_prefix: str = None):
+def get_s3_resource_archival_object_paths(
+    resource_id: str, bucket: str = None, path_prefix: str = None
+):
     """
     Get a list of S3 paths for archival objects under a given resource prefix.
 
@@ -455,7 +457,7 @@ def get_s3_resource_archival_object_paths(resource_id: str, bucket: str = None, 
     for result in paginator.paginate(
         Bucket=bucket,
         Delimiter="/",
-        Prefix=f'{path_prefix}/{resource_id}/',
+        Prefix=f"{path_prefix}/{resource_id}/",
     ):
         for prefix in result.get("CommonPrefixes"):
             # store collection_id/component_id/
@@ -523,7 +525,10 @@ def parse_metadata_identifier(
         # 👋 WE HAVE A RESOURCE
         # get the *PUBLISHED* archival objects under this resource from S3 (anything in S3 is published)
         component_identifiers = [
-            p.split("/")[-2] for p in get_s3_resource_archival_object_paths(identifier, bucket, path_prefix)
+            p.split("/")[-2]
+            for p in get_s3_resource_archival_object_paths(
+                identifier, bucket, path_prefix
+            )
         ]
         for component_id in component_identifiers:
             if find_archival_object(component_id):
