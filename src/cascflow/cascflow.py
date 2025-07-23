@@ -135,7 +135,7 @@ def create_digital_object(archival_object, digital_object_type=""):
         archival_object["uri"], archival_object
     )
     logger.info(
-        f'☑️  ARCHIVAL OBJECT UPDATED: {archival_object_post_response.json()["uri"]}'
+        f"☑️  ARCHIVAL OBJECT UPDATED: {archival_object_post_response.json()['uri']}"
     )
 
     # TODO investigate how to roll back adding digital object to archival object
@@ -302,7 +302,7 @@ def establish_archivesspace_connection():
     logger.debug("🐞 ESTABLISHING A CONNECTION TO ARCHIVESSPACE")
     asnake_client.authorize()
     logger.debug(
-        f'🐞 CONNECTION TO ARCHIVESSPACE ESTABLISHED: {config("ARCHIVESSPACE_API_URL")}'
+        f"🐞 CONNECTION TO ARCHIVESSPACE ESTABLISHED: {config('ARCHIVESSPACE_API_URL')}"
     )
     return
 
@@ -326,10 +326,10 @@ def establish_s3_connection():
     global s3_client
     s3_client = boto3.client(
         "s3",
-        aws_access_key_id=config("DISTILLERY_AWS_ACCESS_KEY_ID"),
-        aws_secret_access_key=config("DISTILLERY_AWS_SECRET_ACCESS_KEY"),
+        aws_access_key_id=config("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=config("AWS_SECRET_ACCESS_KEY"),
     )
-    logger.debug(f'🐞 CONNECTION TO S3 ESTABLISHED: {config("ALCHEMIST_BUCKET")}')
+    logger.debug("🐞 CONNECTION TO S3 ESTABLISHED")
     return
 
 
@@ -433,22 +433,31 @@ def find_archival_object(component_id):
 
 
 @ensure_s3_connection
-def get_s3_resource_archival_object_paths(resource_id: str):
+def get_s3_resource_archival_object_paths(
+    resource_id: str, bucket: str = None, path_prefix: str = None
+):
     """
     Get a list of S3 paths for archival objects under a given resource prefix.
 
     Args:
         resource_id (str): The ArchivesSpace identifier for the resource.
+        bucket (str, optional): S3 bucket name. If None, uses config("S3_BUCKET").
+        path_prefix (str, optional): Prefix for S3 paths. If None, uses config("COMMON_PATH_PREFIX").
 
     Returns:
         list: A list of S3 paths for archival objects.
     """
+    if bucket is None:
+        bucket = config("S3_BUCKET")
+    if path_prefix is None:
+        path_prefix = config("COMMON_PATH_PREFIX")
+
     paginator = s3_client.get_paginator("list_objects_v2")
     archival_object_prefixes = []
     for result in paginator.paginate(
-        Bucket=config("ALCHEMIST_BUCKET"),
+        Bucket=bucket,
         Delimiter="/",
-        Prefix=f'{config("ALCHEMIST_URL_PREFIX")}/{resource_id}/',
+        Prefix=f"{path_prefix}/{resource_id}/",
     ):
         for prefix in result.get("CommonPrefixes"):
             # store collection_id/component_id/
@@ -456,7 +465,12 @@ def get_s3_resource_archival_object_paths(resource_id: str):
     return archival_object_prefixes
 
 
-def parse_metadata_identifier(identifier: str):
+def parse_metadata_identifier(
+    identifier: str,
+    repository_id: str = None,
+    bucket: str = None,
+    path_prefix: str = None,
+):
     """
     Determines whether the provided identifier corresponds to a resource or an archival object in ArchivesSpace,
     and validates the existence of eligible archival objects under that identifier.
@@ -471,6 +485,9 @@ def parse_metadata_identifier(identifier: str):
 
     Args:
         identifier (str): The identifier for a resource or archival object.
+        repository_id (str, optional): Repository ID. If None, uses config("ARCHIVESSPACE_REPOSITORY_ID", default="2").
+        bucket (str, optional): S3 bucket name. If None, uses config("S3_BUCKET").
+        path_prefix (str, optional): Prefix for S3 paths. If None, uses config("COMMON_PATH_PREFIX").
 
     Returns:
         dict: A dictionary with the following keys:
@@ -489,12 +506,14 @@ def parse_metadata_identifier(identifier: str):
             "ineligible_archival_objects": ["11111"]
         }
     """
-    # TODO set Repository ID in config
+    if repository_id is None:
+        repository_id = config("ARCHIVESSPACE_REPOSITORY_ID", default="2")
+
     find_resources_identifier_response = archivessnake_get(
-        f'/repositories/2/find_by_id/resources?identifier[]=["{identifier}"]',
+        f'/repositories/{repository_id}/find_by_id/resources?identifier[]=["{identifier}"]',
     )
     find_archival_object_component_id_response = archivessnake_get(
-        f"/repositories/2/find_by_id/archival_objects?component_id[]={identifier}"
+        f"/repositories/{repository_id}/find_by_id/archival_objects?component_id[]={identifier}"
     )
     eligible_archival_objects = []
     ineligible_archival_objects = []
@@ -506,7 +525,10 @@ def parse_metadata_identifier(identifier: str):
         # 👋 WE HAVE A RESOURCE
         # get the *PUBLISHED* archival objects under this resource from S3 (anything in S3 is published)
         component_identifiers = [
-            p.split("/")[-2] for p in get_s3_resource_archival_object_paths(identifier)
+            p.split("/")[-2]
+            for p in get_s3_resource_archival_object_paths(
+                identifier, bucket, path_prefix
+            )
         ]
         for component_id in component_identifiers:
             if find_archival_object(component_id):
