@@ -11,7 +11,33 @@ import requests
 import urllib3
 
 from asnake.client import ASnakeClient  # pypi: ArchivesSnake
-from decouple import config, Csv  # pypi: python-decouple
+from decouple import Csv  # pypi: python-decouple
+
+# global config instance - can be overridden by consuming applications
+_config = None
+
+
+def get_config():
+    """Get the config instance, importing default if none set."""
+    global _config
+    if _config is None:
+        from decouple import config
+
+        _config = config
+    return _config
+
+
+def set_config(config_instance):
+    """Set a custom config instance for the library to use."""
+    global _config
+    _config = config_instance
+
+
+# convenience function for backward compatibility
+def config(*args, **kwargs):
+    """Access configuration values through the current config instance."""
+    return get_config()(*args, **kwargs)
+
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -294,16 +320,28 @@ def ensure_archivesspace_connection(func):
 
 def establish_archivesspace_connection():
     global asnake_client
+    # create client with standard parameters
     asnake_client = ASnakeClient(
         baseurl=config("ARCHIVESSPACE_API_URL"),
         username=config("ARCHIVESSPACE_USERNAME"),
         password=config("ARCHIVESSPACE_PASSWORD"),
     )
+    # check for optional basic auth credentials
+    basic_auth_username = config("ARCHIVESSPACE_BASIC_AUTH_USERNAME", default=None)
+    basic_auth_password = config("ARCHIVESSPACE_BASIC_AUTH_PASSWORD", default=None)
+    # add basic auth to the session if credentials are provided
+    if basic_auth_username and basic_auth_password:
+        # set basic auth on the session
+        asnake_client.session.auth = (basic_auth_username, basic_auth_password)
     logger.debug("🐞 ESTABLISHING A CONNECTION TO ARCHIVESSPACE")
-    asnake_client.authorize()
-    logger.debug(
-        f"🐞 CONNECTION TO ARCHIVESSPACE ESTABLISHED: {config('ARCHIVESSPACE_API_URL')}"
-    )
+    try:
+        asnake_client.authorize()
+        logger.debug(
+            f"🐞 CONNECTION TO ARCHIVESSPACE ESTABLISHED: {config('ARCHIVESSPACE_API_URL')}"
+        )
+    except Exception as e:
+        logger.error(f"❌ FAILED TO ESTABLISH ARCHIVESSPACE CONNECTION: {e}")
+        raise
     return
 
 
