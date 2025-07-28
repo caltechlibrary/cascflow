@@ -11,7 +11,28 @@ import requests
 import urllib3
 
 from asnake.client import ASnakeClient  # pypi: ArchivesSnake
-from decouple import config, Csv  # pypi: python-decouple
+from decouple import Csv  # pypi: python-decouple
+
+# global config instance - can be overridden by consuming applications
+_config = None
+
+def get_config():
+    """Get the config instance, importing default if none set."""
+    global _config
+    if _config is None:
+        from decouple import config
+        _config = config
+    return _config
+
+def set_config(config_instance):
+    """Set a custom config instance for the library to use."""
+    global _config
+    _config = config_instance
+
+# convenience function for backward compatibility
+def config(*args, **kwargs):
+    """Access configuration values through the current config instance."""
+    return get_config()(*args, **kwargs)
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())

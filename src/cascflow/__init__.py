@@ -23,6 +23,9 @@ from .cascflow import (
     delete_files_to_remove,
     inspect_entry_directory,
     validate_digital_files,
+    config,
+    set_config,
+    get_config,
 )
 
 __all__ = [
@@ -50,4 +53,7 @@ __all__ = [
     "delete_files_to_remove",
     "inspect_entry_directory",
     "validate_digital_files",
+    "config",
+    "set_config",
+    "get_config",
 ]
