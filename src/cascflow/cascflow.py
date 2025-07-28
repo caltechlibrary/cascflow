@@ -315,16 +315,26 @@ def ensure_archivesspace_connection(func):
 
 def establish_archivesspace_connection():
     global asnake_client
+    # create client with standard parameters
     asnake_client = ASnakeClient(
         baseurl=config("ARCHIVESSPACE_API_URL"),
         username=config("ARCHIVESSPACE_USERNAME"),
         password=config("ARCHIVESSPACE_PASSWORD"),
     )
+    # check for optional basic auth credentials
+    basic_auth_username = config("ARCHIVESSPACE_BASIC_AUTH_USERNAME", default=None)
+    basic_auth_password = config("ARCHIVESSPACE_BASIC_AUTH_PASSWORD", default=None)
+    # add basic auth to the session if credentials are provided
+    if basic_auth_username and basic_auth_password:
+        # set basic auth on the session
+        asnake_client.session.auth = (basic_auth_username, basic_auth_password)
     logger.debug("🐞 ESTABLISHING A CONNECTION TO ARCHIVESSPACE")
-    asnake_client.authorize()
-    logger.debug(
-        f"🐞 CONNECTION TO ARCHIVESSPACE ESTABLISHED: {config('ARCHIVESSPACE_API_URL')}"
-    )
+    try:
+        asnake_client.authorize()
+        logger.debug("🐞 CONNECTION TO ARCHIVESSPACE ESTABLISHED: {}".format(config("ARCHIVESSPACE_API_URL")))
+    except Exception as e:
+        logger.error(f"❌ FAILED TO ESTABLISH ARCHIVESSPACE CONNECTION: {e}")
+        raise
     return
 
 
