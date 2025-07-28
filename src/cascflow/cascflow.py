@@ -16,23 +16,28 @@ from decouple import Csv  # pypi: python-decouple
 # global config instance - can be overridden by consuming applications
 _config = None
 
+
 def get_config():
     """Get the config instance, importing default if none set."""
     global _config
     if _config is None:
         from decouple import config
+
         _config = config
     return _config
+
 
 def set_config(config_instance):
     """Set a custom config instance for the library to use."""
     global _config
     _config = config_instance
 
+
 # convenience function for backward compatibility
 def config(*args, **kwargs):
     """Access configuration values through the current config instance."""
     return get_config()(*args, **kwargs)
+
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -331,7 +336,9 @@ def establish_archivesspace_connection():
     logger.debug("🐞 ESTABLISHING A CONNECTION TO ARCHIVESSPACE")
     try:
         asnake_client.authorize()
-        logger.debug("🐞 CONNECTION TO ARCHIVESSPACE ESTABLISHED: {}".format(config("ARCHIVESSPACE_API_URL")))
+        logger.debug(
+            f"🐞 CONNECTION TO ARCHIVESSPACE ESTABLISHED: {config('ARCHIVESSPACE_API_URL')}"
+        )
     except Exception as e:
         logger.error(f"❌ FAILED TO ESTABLISH ARCHIVESSPACE CONNECTION: {e}")
         raise
