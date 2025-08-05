@@ -503,91 +503,126 @@ def get_s3_resource_archival_object_paths(
     return archival_object_prefixes
 
 
-def parse_metadata_identifier(
+def validate_metadata_identifier(
     identifier: str,
-    repository_id: str = None,
-    bucket: str = None,
-    path_prefix: str = None,
+    target: str = "",
+    repository_id: str = "",
+    bucket: str = "",
+    path_prefix: str = "",
 ):
     """
-    Determines whether the provided identifier corresponds to a resource or an archival object in ArchivesSpace,
-    and validates the existence of eligible archival objects under that identifier.
+    Validates a metadata identifier to determine if it represents a resource
+    or archival object, and classifies associated archival objects by their existence
+    in ArchivesSpace.
 
-    This function:
-    - Checks if the identifier matches a resource (`id_0`) in ArchivesSpace.
-    - If it is a resource, retrieves all published archival objects under that resource from S3 and validates each one.
-    - If it is not a resource, checks if the identifier matches an archival object (`component_id`) in ArchivesSpace.
-    - Returns lists of eligible and ineligible archival objects based on their existence in ArchivesSpace.
+    The function operates in two modes based on the `target` parameter:
 
-    Caltech Archives policy is to only use the `id_0` field for resource identifiers.
+    **Metadata mode (target="metadata"):**
+    - First checks if identifier matches a resource (`id_0`) in ArchivesSpace
+    - If it's a resource: retrieves all published archival objects from S3 and validates each
+    - If not a resource: treats identifier as an archival object and validates it directly
+
+    **Other modes (target != "metadata"):**
+    - Treats identifier as an archival object and validates it directly
+    - Sets identifier_level to "archival_object"
+
+    Validation is performed by attempting to find each archival object in ArchivesSpace.
+    Objects that exist are classified as "eligible", those that don't are "ineligible".
 
     Args:
-        identifier (str): The identifier for a resource or archival object.
-        repository_id (str, optional): Repository ID. If None, uses config("ARCHIVESSPACE_REPOSITORY_ID", default="2").
-        bucket (str, optional): S3 bucket name. If None, uses config("S3_BUCKET").
-        path_prefix (str, optional): Prefix for S3 paths. If None, uses config("COMMON_PATH_PREFIX").
+        identifier (str): The identifier to parse - either a resource ID or archival object component ID.
+        target (str, optional): The workflow target. If "metadata", enables resource lookup.
+            Defaults to "".
+        repository_id (str, optional): ArchivesSpace repository ID. If empty, uses
+            config("ARCHIVESSPACE_REPOSITORY_ID", default="2").
+        bucket (str, optional): S3 bucket name for resource lookup. If empty, uses
+            config("S3_BUCKET").
+        path_prefix (str, optional): S3 path prefix for resource lookup. If empty, uses
+            config("COMMON_PATH_PREFIX").
 
     Returns:
-        dict: A dictionary with the following keys:
+        dict: A dictionary containing:
             - "identifier_level" (str): Either "resource" or "archival_object".
-            - "eligible_archival_objects" (list): Identifiers of archival objects that exist in ArchivesSpace.
-            - "ineligible_archival_objects" (list): Identifiers of archival objects that do not exist in ArchivesSpace.
+            - "eligible_archival_objects" (dict): Component IDs mapped to full archival object data
+              for objects that exist in ArchivesSpace.
+            - "ineligible_archival_objects" (list[str]): Component IDs of archival objects
+              that do not exist in ArchivesSpace.
 
-    Raises:
-        ValueError: If the identifier does not correspond to a valid resource or archival object.
+    Note:
+        - Uses Caltech Archives policy: only `id_0` field is used for resource identifiers
+        - For resources, only published archival objects (those present in S3) are checked
+        - Validation failures (archival objects not found) are caught and handled gracefully
 
     Example:
-        >>> parse_metadata_identifier("12345")
+        >>> validate_metadata_identifier("CollectionID", target="metadata")
         {
             "identifier_level": "resource",
-            "eligible_archival_objects": ["67890", "54321"],
-            "ineligible_archival_objects": ["11111"]
+            "eligible_archival_objects": {"ComponentID_1": {...archival_object_data...}, "ComponentID_2": {...}},
+            "ineligible_archival_objects": ["ComponentID_3"]
+        }
+
+        >>> validate_metadata_identifier("ComponentID_1", target="files")
+        {
+            "identifier_level": "archival_object",
+            "eligible_archival_objects": {"ComponentID_1": {...archival_object_data...}},
+            "ineligible_archival_objects": []
         }
     """
-    if repository_id is None:
-        repository_id = config("ARCHIVESSPACE_REPOSITORY_ID", default="2")
+    if repository_id == "":
+        repository_id = str(config("ARCHIVESSPACE_REPOSITORY_ID", default="2"))
 
-    find_resources_identifier_response = archivessnake_get(
-        f'/repositories/{repository_id}/find_by_id/resources?identifier[]=["{identifier}"]',
-    )
-    find_archival_object_component_id_response = archivessnake_get(
-        f"/repositories/{repository_id}/find_by_id/archival_objects?component_id[]={identifier}"
-    )
-    eligible_archival_objects = []
+    eligible_archival_objects = {}
     ineligible_archival_objects = []
-    if (
-        len(find_resources_identifier_response.json()["resources"]) == 1
-        and len(find_archival_object_component_id_response.json()["archival_objects"])
-        < 1
-    ):
-        # 👋 WE HAVE A RESOURCE
-        # get the *PUBLISHED* archival objects under this resource from S3 (anything in S3 is published)
-        component_identifiers = [
-            p.split("/")[-2]
-            for p in get_s3_resource_archival_object_paths(
-                identifier, bucket, path_prefix
-            )
-        ]
-        for component_id in component_identifiers:
-            if find_archival_object(component_id):
-                eligible_archival_objects.append(component_id)
-            else:
-                ineligible_archival_objects.append(component_id)
+
+    def classify_archival_object_eligibility(component_id: str) -> dict:
+        try:
+            archival_object = find_archival_object(component_id)
+            eligible_archival_objects[component_id] = archival_object
+        except ValueError:
+            ineligible_archival_objects.append(component_id)
         return {
-            "identifier_level": "resource",
             "eligible_archival_objects": eligible_archival_objects,
             "ineligible_archival_objects": ineligible_archival_objects,
         }
-    elif len(find_resources_identifier_response.json()["resources"]) < 1:
-        if find_archival_object(identifier):
-            eligible_archival_objects.append(identifier)
+
+    if target == "metadata":
+        # the Update Metadata workflow accepts identifiers for either resources or archival objects
+        find_resources_identifier_response = archivessnake_get(
+            f'/repositories/{repository_id}/find_by_id/resources?identifier[]=["{identifier}"]',
+        )
+        find_archival_object_component_id_response = archivessnake_get(
+            f"/repositories/{repository_id}/find_by_id/archival_objects?component_id[]={identifier}"
+        )
+        if (
+            len(find_resources_identifier_response.json()["resources"]) == 1
+            and len(find_archival_object_component_id_response.json()["archival_objects"])
+            < 1
+        ):
+            # 👋 WE HAVE A RESOURCE
+            identifier_level = "resource"
+            # get the *PUBLISHED* archival objects under this resource from S3 (anything in S3 is published)
+            component_identifiers = [
+                p.split("/")[-2]
+                for p in get_s3_resource_archival_object_paths(
+                    identifier, bucket, path_prefix
+                )
+            ]
+            for component_id in component_identifiers:
+                classify_archival_object_eligibility(component_id)
         else:
-            ineligible_archival_objects.append(identifier)
-        return {
-            "identifier_level": "archival_object",
-            "eligible_archival_objects": eligible_archival_objects,
-            "ineligible_archival_objects": ineligible_archival_objects,
-        }
+            # 👋 WE HAVE AN ARCHIVAL OBJECT
+            identifier_level = "archival_object"
+            classify_archival_object_eligibility(identifier)
+    else:
+        # 👋 WE HAVE AN ARCHIVAL OBJECT
+        # the Update Publication and Update Files workflows only accept identifiers for archival objects
+        identifier_level = "archival_object"
+        classify_archival_object_eligibility(identifier)
+    return {
+        "identifier_level": identifier_level,
+        "eligible_archival_objects": eligible_archival_objects,
+        "ineligible_archival_objects": ineligible_archival_objects,
+    }
 
 
 def validate_source_path(volume_name: str):
@@ -636,8 +671,8 @@ def validate_digital_files(context: str) -> dict:
     Returns:
         dict: A dictionary containing the results of the validation. Keys include:
             - "source_path" (Path): The resolved source path.
-            - "eligible_archival_objects" (list): A list of archival object identifiers
-              that passed validation.
+            - "eligible_archival_objects" (dict): Component IDs mapped to full archival object data
+              for objects that passed validation.
             - "ineligible_archival_objects" (list): A list of archival object identifiers
               that failed validation.
             - "nested_directories" (list): A list of directories containing subdirectories.
@@ -662,7 +697,7 @@ def validate_digital_files(context: str) -> dict:
         >>> validate("files", "source_volume_name")
         {
             "source_path": PosixPath("/path/to/source"),
-            "eligible_archival_objects": ["obj1", "obj2"],
+            "eligible_archival_objects": {"obj1": {...archival_object_data...}, "obj2": {...}},
             "ineligible_archival_objects": ["obj3"],
             "nested_directories": [PosixPath("/path/to/source/nested_dir")],
             "empty_directories": [PosixPath("/path/to/source/empty_dir")],
@@ -673,7 +708,7 @@ def validate_digital_files(context: str) -> dict:
 
     source_path = validate_source_path(context)
 
-    eligible_archival_objects = []
+    eligible_archival_objects = {}
     ineligible_archival_objects = []
     nested_directories = []
     empty_directories = []
@@ -683,12 +718,14 @@ def validate_digital_files(context: str) -> dict:
     ## iterate over the first level of entries in the source directory
     for entry in source_path.iterdir():
         ## validate the entry (file or directory)
-        eligible_archival_objects.extend(
-            parse_metadata_identifier(entry.stem).get("eligible_archival_objects", [])
-        )
-        ineligible_archival_objects.extend(
-            parse_metadata_identifier(entry.stem).get("ineligible_archival_objects", [])
-        )
+        validated_metadata_identifier = validate_metadata_identifier(entry.stem)
+        if validated_metadata_identifier is not None:
+            eligible_archival_objects.update(
+                validated_metadata_identifier.get("eligible_archival_objects", {})
+            )
+            ineligible_archival_objects.extend(
+                validated_metadata_identifier.get("ineligible_archival_objects", [])
+            )
         ## count files in the root directory
         if entry.is_file():
             file_count += 1
