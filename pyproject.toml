@@ -1,6 +1,6 @@
 [project]
 name = "cascflow"
-version = "2.2.0"
+version = "3.0.0"
 description = "Caltech Archives & Special Collections Workflow Library"
 readme = "README.md"
 authors = [
@@ -10,7 +10,7 @@ requires-python = ">=3.13"
 dependencies = [
     "archivessnake>=0.10",
     "backoff>=2.2",
-    "boto3>=1.38",
+    "boto3>=1.40",
     "python-decouple>=3.8",
     "requests>=2.32",
     "urllib3>=2.4",
@@ -22,5 +22,5 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
-    "ruff>=0.11.13",
+    "ruff>=0.12",
 ]
