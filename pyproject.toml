@@ -1,6 +1,6 @@
 [project]
 name = "cascflow"
-version = "3.0.0"
+version = "3.0.1"
 description = "Caltech Archives & Special Collections Workflow Library"
 readme = "README.md"
 authors = [

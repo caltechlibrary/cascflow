@@ -466,7 +466,7 @@ def find_archival_object(component_id):
             + "&resolve[]=subjects"
             + "&resolve[]=top_container"
         ).json()
-        logger.info(f"☑️ ARCHIVAL OBJECT FOUND: {component_id}")
+        logger.debug(f"🐞 ARCHIVAL OBJECT FOUND: {component_id}")
         return archival_object
 
 
