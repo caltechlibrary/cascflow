@@ -147,7 +147,7 @@ def create_digital_object(archival_object, digital_object_type=""):
             )
     else:
         digital_object_uri = digital_object_post_response.json()["uri"]
-        logger.info(f"✳️  DIGITAL OBJECT CREATED: {digital_object_uri}")
+        logger.info(f"✳️ DIGITAL OBJECT CREATED: [{digital_object['title']}]({str(config('ARCHIVESSPACE_STAFF_URL')).rstrip('/')}/resolve/readonly?uri={digital_object_uri})")
 
     # set up a digital object instance to add to the archival object
     digital_object_instance = {
@@ -160,7 +160,7 @@ def create_digital_object(archival_object, digital_object_type=""):
     archival_object_post_response = archivessnake_post(
         archival_object["uri"], archival_object
     )
-    logger.info(
+    logger.debug(
         f"☑️  ARCHIVAL OBJECT UPDATED: {archival_object_post_response.json()['uri']}"
     )
 
@@ -272,7 +272,7 @@ def get_arrangement(archival_object):
                 arrangement["file_id"] = ancestor["_resolved"].get("component_id")
                 arrangement["file_title"] = ancestor["_resolved"].get("title")
                 arrangement["file_uri"] = ancestor["ref"]
-        logger.info("☑️  ARRANGEMENT LEVELS AGGREGATED")
+        logger.debug("☑️  ARRANGEMENT LEVELS AGGREGATED")
         return arrangement
     except:
         logger.exception("‼️")
@@ -292,6 +292,7 @@ def execute(source_volume: str, batch_set_id: str, pipeline: str):
         batch_directory.joinpath("STAGE_1_INITIAL").iterdir(), key=lambda obj: obj.name
     ):
         archival_object = find_archival_object(stage_1_path_obj.stem)
+        logger.info(f"☑️ ARCHIVAL OBJECT: [{archival_object['id']}]({str(config('ARCHIVESSPACE_STAFF_URL')).rstrip('/')}/resolve/readonly?uri={archival_object['uri']})")
         arrangement = get_arrangement(archival_object)
         stage_2_path_obj = move_to_stage_2(stage_1_path_obj, batch_directory)
         if stage_2_path_obj.is_file():
@@ -400,7 +401,7 @@ def s3_put_object(bucket: str, key: str, body=b""):
                 Key=key,
                 Body=body,
             )
-        logger.info(f"☑️ OBJECT PUT TO S3: {bucket}/{key}")
+        logger.debug(f"☑️ OBJECT PUT TO S3: {bucket}/{key}")
         return response
     except Exception as e:
         logger.error(f"❌ ERROR PUTTING OBJECT: {e}")
