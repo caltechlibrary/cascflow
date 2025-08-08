@@ -292,7 +292,7 @@ def execute(source_volume: str, batch_set_id: str, pipeline: str):
         batch_directory.joinpath("STAGE_1_INITIAL").iterdir(), key=lambda obj: obj.name
     ):
         archival_object = find_archival_object(stage_1_path_obj.stem)
-        logger.info(f"☑️ ARCHIVAL OBJECT: [{archival_object['id']}]({str(config('ARCHIVESSPACE_STAFF_URL')).rstrip('/')}/resolve/readonly?uri={archival_object['uri']})")
+        logger.info(f"☑️ ARCHIVAL OBJECT: [{archival_object['component_id']}]({str(config('ARCHIVESSPACE_STAFF_URL')).rstrip('/')}/resolve/readonly?uri={archival_object['uri']})")
         arrangement = get_arrangement(archival_object)
         stage_2_path_obj = move_to_stage_2(stage_1_path_obj, batch_directory)
         if stage_2_path_obj.is_file():
