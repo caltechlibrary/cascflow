@@ -1,5 +1,5 @@
 import configparser
-import http
+import http.client
 import logging
 import logging.config
 
