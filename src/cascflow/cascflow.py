@@ -376,6 +376,7 @@ def establish_s3_connection():
 @ensure_s3_connection
 def s3_get_object(bucket, key):
     """Get an object from S3."""
+    assert s3_client is not None, "🐞 s3_client cannot be None"
     try:
         response = s3_client.get_object(Bucket=bucket, Key=key)
         return response
@@ -390,6 +391,7 @@ def s3_get_object(bucket, key):
 @ensure_s3_connection
 def s3_put_object(bucket: str, key: str, body=b""):
     """Put an object to S3."""
+    assert s3_client is not None, "🐞 s3_client cannot be None"
     try:
         if not body:
             response = s3_client.put_object(
@@ -499,7 +501,7 @@ def get_s3_resource_archival_object_paths(
         bucket = config("S3_BUCKET")
     if path_prefix is None:
         path_prefix = config("COMMON_PATH_PREFIX")
-
+    assert s3_client is not None, "🐞 s3_client cannot be None"
     paginator = s3_client.get_paginator("list_objects_v2")
     archival_object_prefixes = []
     for result in paginator.paginate(
