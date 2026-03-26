@@ -103,6 +103,7 @@ def save_digital_object_file_versions(archival_object, new_file_versions):
 
 def create_digital_object(archival_object, digital_object_type=""):
     digital_object = {}
+    digital_object_uri = ""
     digital_object["digital_object_id"] = archival_object["component_id"]  # required
     digital_object["title"] = archival_object["title"]  # required
     if digital_object_type:
@@ -484,22 +485,22 @@ def find_archival_object(component_id):
 
 @ensure_s3_connection
 def get_s3_resource_archival_object_paths(
-    resource_id: str, bucket: str = None, path_prefix: str = None
+    resource_id: str, bucket: str = "", path_prefix: str = ""
 ):
     """
     Get a list of S3 paths for archival objects under a given resource prefix.
 
     Args:
         resource_id (str): The ArchivesSpace identifier for the resource.
-        bucket (str, optional): S3 bucket name. If None, uses config("S3_BUCKET").
-        path_prefix (str, optional): Prefix for S3 paths. If None, uses config("COMMON_PATH_PREFIX").
+        bucket (str, optional): S3 bucket name. If empty, uses config("S3_BUCKET").
+        path_prefix (str, optional): Prefix for S3 paths. If empty, uses config("COMMON_PATH_PREFIX").
 
     Returns:
         list: A list of S3 paths for archival objects.
     """
-    if bucket is None:
+    if not bucket:
         bucket = config("S3_BUCKET")
-    if path_prefix is None:
+    if not path_prefix:
         path_prefix = config("COMMON_PATH_PREFIX")
     assert s3_client is not None, "🐞 s3_client cannot be None"
     paginator = s3_client.get_paginator("list_objects_v2")
