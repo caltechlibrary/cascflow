@@ -1,6 +1,6 @@
 [project]
 name = "cascflow"
-version = "3.0.4"
+version = "4.0.0"
 description = "Caltech Archives & Special Collections Workflow Library"
 readme = "README.md"
 authors = [
@@ -8,7 +8,6 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
-    "archivessnake",
     "backoff",
     "boto3",
     "python-decouple",

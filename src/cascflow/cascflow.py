@@ -10,7 +10,6 @@ import boto3
 import requests
 import urllib3
 
-from asnake.client import ASnakeClient  # pypi: ArchivesSnake
 from decouple import Csv  # pypi: python-decouple
 
 # global config instance - can be overridden by consuming applications
@@ -67,7 +66,7 @@ def fallback_logging():
 
 def update_digital_object(uri, data):
     # raises an HTTPError exception if unsuccessful
-    response = archivessnake_post(uri, data)
+    response = archivesspace_post(uri, data)
     logger.debug(f"🐞 RESPONSE: {response.json()}")
     response.raise_for_status()
     return response
@@ -111,7 +110,7 @@ def create_digital_object(archival_object, digital_object_type=""):
     # NOTE leaving created digital objects unpublished
     # digital_object['publish'] = True
 
-    digital_object_post_response = archivessnake_post(
+    digital_object_post_response = archivesspace_post(
         "/repositories/2/digital_objects", digital_object
     )
     # example success response:
@@ -147,7 +146,9 @@ def create_digital_object(archival_object, digital_object_type=""):
             )
     else:
         digital_object_uri = digital_object_post_response.json()["uri"]
-        logger.info(f"✳️ DIGITAL OBJECT CREATED: [{digital_object['title']}]({str(config('ARCHIVESSPACE_STAFF_URL')).rstrip('/')}/resolve/readonly?uri={digital_object_uri})")
+        logger.info(
+            f"✳️ DIGITAL OBJECT CREATED: [{digital_object['title']}]({str(config('ARCHIVESSPACE_STAFF_URL')).rstrip('/')}/resolve/readonly?uri={digital_object_uri})"
+        )
 
     # set up a digital object instance to add to the archival object
     digital_object_instance = {
@@ -157,7 +158,7 @@ def create_digital_object(archival_object, digital_object_type=""):
     # add digital object instance to archival object
     archival_object["instances"].append(digital_object_instance)
     # post updated archival object
-    archival_object_post_response = archivessnake_post(
+    archival_object_post_response = archivesspace_post(
         archival_object["uri"], archival_object
     )
     logger.debug(
@@ -292,7 +293,9 @@ def execute(source_volume: str, batch_set_id: str, pipeline: str):
         batch_directory.joinpath("STAGE_1_INITIAL").iterdir(), key=lambda obj: obj.name
     ):
         archival_object = find_archival_object(stage_1_path_obj.stem)
-        logger.info(f"☑️ ARCHIVAL OBJECT: [{archival_object['component_id']}]({str(config('ARCHIVESSPACE_STAFF_URL')).rstrip('/')}/resolve/readonly?uri={archival_object['uri']})")
+        logger.info(
+            f"☑️ ARCHIVAL OBJECT: [{archival_object['component_id']}]({str(config('ARCHIVESSPACE_STAFF_URL')).rstrip('/')}/resolve/readonly?uri={archival_object['uri']})"
+        )
         arrangement = get_arrangement(archival_object)
         stage_2_path_obj = move_to_stage_2(stage_1_path_obj, batch_directory)
         if stage_2_path_obj.is_file():
@@ -304,45 +307,43 @@ def execute(source_volume: str, batch_set_id: str, pipeline: str):
         yield batch_directory, stage_2_path_obj, filepaths, archival_object, arrangement
 
 
-asnake_client = None
+# Global session for ArchivesSpace API
+archivesspace_session: requests.Session | None = None
 
 
 def ensure_archivesspace_connection(func):
-    """Decorator to ensure archivesspace connection is established before function call."""
+    """Decorator to ensure archivesspace session is established before function call."""
 
     def wrapper(*args, **kwargs):
-        global asnake_client
-        if asnake_client is None:
-            establish_archivesspace_connection()
+        global archivesspace_session
+        if archivesspace_session is None:
+            establish_archivesspace_session()
         return func(*args, **kwargs)
 
     return wrapper
 
 
-def establish_archivesspace_connection():
-    global asnake_client
-    # create client with standard parameters
-    asnake_client = ASnakeClient(
-        baseurl=config("ARCHIVESSPACE_API_URL"),
-        username=config("ARCHIVESSPACE_USERNAME"),
-        password=config("ARCHIVESSPACE_PASSWORD"),
-    )
-    # check for optional basic auth credentials
-    basic_auth_username = config("ARCHIVESSPACE_BASIC_AUTH_USERNAME", default=None)
-    basic_auth_password = config("ARCHIVESSPACE_BASIC_AUTH_PASSWORD", default=None)
-    # add basic auth to the session if credentials are provided
-    if basic_auth_username and basic_auth_password:
-        # set basic auth on the session
-        asnake_client.session.auth = (basic_auth_username, basic_auth_password)
-    logger.debug("🐞 ESTABLISHING A CONNECTION TO ARCHIVESSPACE")
+def establish_archivesspace_session():
+    """Establish a requests.Session authenticated with ArchivesSpace API."""
+    global archivesspace_session
+    session = requests.Session()
+    baseurl = config("ARCHIVESSPACE_API_URL")
+    username = config("ARCHIVESSPACE_USERNAME")
+    password = config("ARCHIVESSPACE_PASSWORD")
+    login_url = f"{baseurl}/users/{username}/login"
+    logger.debug("🐞 ESTABLISHING A SESSION TO ARCHIVESSPACE")
     try:
-        asnake_client.authorize()
-        logger.debug(
-            f"🐞 CONNECTION TO ARCHIVESSPACE ESTABLISHED: {config('ARCHIVESSPACE_API_URL')}"
-        )
+        resp = session.post(login_url, data={"password": password})
+        resp.raise_for_status()
+        if resp.json().get("session"):
+            session.headers.update({"X-ArchivesSpace-Session": resp.json()["session"]})
+            logger.debug(f"🐞 SESSION TO ARCHIVESSPACE ESTABLISHED: {baseurl}")
+        else:
+            raise RuntimeError(f"❌ LOGIN FAILED: {resp.text}")
     except Exception as e:
-        logger.error(f"❌ FAILED TO ESTABLISH ARCHIVESSPACE CONNECTION: {e}")
+        logger.error(f"❌ FAILED TO ESTABLISH ARCHIVESSPACE SESSION: {e}")
         raise
+    archivesspace_session = session
     return
 
 
@@ -420,11 +421,15 @@ def s3_put_object(bucket: str, key: str, body=b""):
     max_time=1800,
 )
 @ensure_archivesspace_connection
-def archivessnake_get(uri, params=None):
+def archivesspace_get(uri, params=None):
+    global archivesspace_session
+    assert archivesspace_session is not None, "🐞 archivesspace_session cannot be None"
+    baseurl = config("ARCHIVESSPACE_API_URL")
+    url = baseurl.rstrip("/") + uri
     if params:
-        return asnake_client.get(uri, params=params)
+        return archivesspace_session.get(url, params=params)
     else:
-        return asnake_client.get(uri)
+        return archivesspace_session.get(url)
 
 
 @backoff.on_exception(
@@ -439,8 +444,12 @@ def archivessnake_get(uri, params=None):
     max_time=1800,
 )
 @ensure_archivesspace_connection
-def archivessnake_post(uri, object):
-    return asnake_client.post(uri, json=object)
+def archivesspace_post(uri, obj):
+    global archivesspace_session
+    assert archivesspace_session is not None, "🐞 archivesspace_session cannot be None"
+    baseurl = config("ARCHIVESSPACE_API_URL")
+    url = baseurl.rstrip("/") + uri
+    return archivesspace_session.post(url, json=obj)
 
 
 def find_archival_object(component_id):
@@ -452,13 +461,13 @@ def find_archival_object(component_id):
     find_uri = (
         f"/repositories/2/find_by_id/archival_objects?component_id[]={component_id}"
     )
-    find_by_id_response = archivessnake_get(find_uri)
+    find_by_id_response = archivesspace_get(find_uri)
     if len(find_by_id_response.json()["archival_objects"]) < 1:
         raise ValueError(f"❌ ARCHIVAL OBJECT NOT FOUND: {component_id}")
     elif len(find_by_id_response.json()["archival_objects"]) > 1:
         raise ValueError(f"❌ MULTIPLE ARCHIVAL OBJECTS FOUND: {component_id}")
     else:
-        archival_object = archivessnake_get(
+        archival_object = archivesspace_get(
             find_by_id_response.json()["archival_objects"][0]["ref"]
             + "?resolve[]=ancestors"
             + "&resolve[]=digital_object"
@@ -588,15 +597,17 @@ def validate_metadata_identifier(
 
     if target == "metadata":
         # the Update Metadata workflow accepts identifiers for either resources or archival objects
-        find_resources_identifier_response = archivessnake_get(
+        find_resources_identifier_response = archivesspace_get(
             f'/repositories/{repository_id}/find_by_id/resources?identifier[]=["{identifier}"]',
         )
-        find_archival_object_component_id_response = archivessnake_get(
+        find_archival_object_component_id_response = archivesspace_get(
             f"/repositories/{repository_id}/find_by_id/archival_objects?component_id[]={identifier}"
         )
         if (
             len(find_resources_identifier_response.json()["resources"]) == 1
-            and len(find_archival_object_component_id_response.json()["archival_objects"])
+            and len(
+                find_archival_object_component_id_response.json()["archival_objects"]
+            )
             < 1
         ):
             # 👋 WE HAVE A RESOURCE
