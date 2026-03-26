@@ -77,7 +77,7 @@ wheels = [
 
 [[package]]
 name = "cascflow"
-version = "3.0.3"
+version = "3.0.4"
 source = { editable = "." }
 dependencies = [
     { name = "archivessnake" },
@@ -90,6 +90,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "decouple-types" },
     { name = "ruff" },
 ]
 
@@ -104,7 +105,10 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-dev = [{ name = "ruff" }]
+dev = [
+    { name = "decouple-types" },
+    { name = "ruff" },
+]
 
 [[package]]
 name = "certifi"
@@ -170,6 +174,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/5d/7a/d269d834cb3a76291651256f3b9a5945e81d0a49ab9f4a498964e83c0416/charset_normalizer-3.4.6-cp314-cp314t-win_amd64.whl", hash = "sha256:cd5e2801c89992ed8c0a3f0293ae83c159a60d9a5d685005383ef4caca77f2c4", size = 169043, upload-time = "2026-03-15T18:52:28.502Z" },
     { url = "https://files.pythonhosted.org/packages/23/06/28b29fba521a37a8932c6a84192175c34d49f84a6d4773fa63d05f9aff22/charset_normalizer-3.4.6-cp314-cp314t-win_arm64.whl", hash = "sha256:47955475ac79cc504ef2704b192364e51d0d473ad452caedd0002605f780101c", size = 148523, upload-time = "2026-03-15T18:52:29.956Z" },
     { url = "https://files.pythonhosted.org/packages/2a/68/687187c7e26cb24ccbd88e5069f5ef00eba804d36dde11d99aad0838ab45/charset_normalizer-3.4.6-py3-none-any.whl", hash = "sha256:947cf925bc916d90adba35a64c82aace04fa39b46b52d4630ece166655905a69", size = 61455, upload-time = "2026-03-15T18:53:23.833Z" },
+]
+
+[[package]]
+name = "decouple-types"
+version = "1.0.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/3e/7a/1e93445dfa0d2307969fcd31e12608d2aec369e67e63f51551d43002df6d/decouple_types-1.0.2.tar.gz", hash = "sha256:9761cba66dad3fa3be2c0a471229e8da54d47900b47bd46c41e14c2e97b34d68", size = 2596, upload-time = "2025-03-07T09:08:46.654Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a5/7e/63f0d7e0c77b552184446befe454eb8841933eeebbdcbc39de6334133259/decouple_types-1.0.2-py3-none-any.whl", hash = "sha256:70ef264b67c57057bbf54db6e6df7c4c477a6370174e8c79548f5acde6c14fdb", size = 3067, upload-time = "2025-03-07T09:08:45.376Z" },
 ]
 
 [[package]]
