@@ -8,12 +8,12 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
-    "archivessnake>=0.10",
-    "backoff>=2.2",
-    "boto3>=1.40",
-    "python-decouple>=3.8",
-    "requests>=2.32",
-    "urllib3>=2.4",
+    "archivessnake",
+    "backoff",
+    "boto3",
+    "python-decouple",
+    "requests",
+    "urllib3",
 ]
 
 [build-system]
@@ -22,5 +22,5 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
-    "ruff>=0.12",
+    "ruff",
 ]
