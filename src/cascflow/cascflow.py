@@ -371,7 +371,7 @@ def establish_s3_connection():
         aws_secret_access_key=config("AWS_SECRET_ACCESS_KEY"),
     )
     logger.debug("🐞 CONNECTION TO S3 ESTABLISHED")
-    return
+    return s3_client
 
 
 @ensure_s3_connection
