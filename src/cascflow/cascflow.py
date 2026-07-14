@@ -99,6 +99,7 @@ def save_digital_object_file_versions(archival_object, new_file_versions):
             # discard keys and create list of unique file_version dictionaries
             file_versions = list(new_file_uri_values.values())
             digital_object = instance["digital_object"]["_resolved"]
+            digital_object["title"] = archival_object["title"]
             digital_object["file_versions"] = file_versions
             digital_object["publish"] = True
             update_digital_object(digital_object["uri"], digital_object).json()
