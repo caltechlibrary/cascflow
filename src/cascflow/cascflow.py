@@ -2,8 +2,11 @@ import configparser
 import http.client
 import logging
 import logging.config
+import os
+import shutil
 
 from pathlib import Path
+from urllib.parse import urlparse
 
 import backoff
 import boto3
@@ -637,6 +640,78 @@ def validate_metadata_identifier(
         "identifier_level": identifier_level,
         "eligible_archival_objects": eligible_archival_objects,
         "ineligible_archival_objects": ineligible_archival_objects,
+    }
+
+
+def validate_setting(key: str, kind: str = "string", required: bool = True) -> dict:
+    """Validate that a settings.ini variable is set and, if set, usable."""
+    value = str(config(key, default="")).strip()
+    result = {"key": key, "kind": kind}
+
+    if not value:
+        result["status"] = "missing" if required else "not_set"
+        if required:
+            result["detail"] = f"{key} is not set"
+        return result
+
+    if kind == "int":
+        try:
+            int(value)
+        except ValueError:
+            result["status"] = "invalid"
+            result["detail"] = f"{value} is not a valid integer"
+        else:
+            result["status"] = "ok"
+    elif kind == "csv":
+        try:
+            Csv()(value)
+        except ValueError as exception:
+            result["status"] = "invalid"
+            result["detail"] = f"{value} is not a valid comma-separated list: {exception}"
+        else:
+            result["status"] = "ok"
+    elif kind == "executable":
+        resolved = shutil.which(value) if os.sep not in value else value
+        if resolved is None or not Path(resolved).exists():
+            result["status"] = "invalid"
+            result["detail"] = f"{value} not found"
+        elif not os.access(resolved, os.X_OK):
+            result["status"] = "invalid"
+            result["detail"] = f"{value} exists but is not executable"
+        else:
+            result["status"] = "ok"
+    elif kind == "directory":
+        if not Path(value).expanduser().is_dir():
+            result["status"] = "invalid"
+            result["detail"] = f"{value} does not exist or is not a directory"
+        else:
+            result["status"] = "ok"
+    elif kind == "url":
+        url = value if urlparse(value).scheme else f"https://{value}"
+        try:
+            response = requests.head(url, timeout=5, allow_redirects=True)
+            if response.status_code >= 400:
+                response = requests.get(url, timeout=5, stream=True)
+            if response.status_code >= 400:
+                result["status"] = "invalid"
+                result["detail"] = f"{url} returned HTTP {response.status_code}"
+            else:
+                result["status"] = "ok"
+        except requests.RequestException as exception:
+            result["status"] = "invalid"
+            result["detail"] = f"{url} unreachable: {exception}"
+    else:
+        result["status"] = "ok"
+    return result
+
+
+def validate_settings(spec: list) -> dict:
+    """Validate a list of {"key", "kind", "required"} settings.ini specs."""
+    results = [validate_setting(**item) for item in spec]
+    return {
+        "results": results,
+        "missing": [result for result in results if result["status"] == "missing"],
+        "invalid": [result for result in results if result["status"] == "invalid"],
     }
 
 
