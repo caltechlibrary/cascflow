@@ -6,6 +6,7 @@ import os
 import shutil
 
 from pathlib import Path
+from typing import Callable, TypeVar, overload
 from urllib.parse import urlparse
 
 import backoff
@@ -13,7 +14,10 @@ import boto3
 import requests
 import urllib3
 
-from decouple import Csv  # pypi: python-decouple
+from decouple import Csv, Undefined, undefined  # pypi: python-decouple
+
+_T1 = TypeVar("_T1")
+_T2 = TypeVar("_T2")
 
 # global config instance - can be overridden by consuming applications
 _config = None
@@ -36,6 +40,14 @@ def set_config(config_instance):
 
 
 # convenience function for backward compatibility
+@overload
+def config(option: str, cast: Undefined = undefined, default: Undefined = undefined) -> str: ...
+@overload
+def config(option: str, default: _T1, cast: Undefined = undefined) -> str | _T1: ...
+@overload
+def config(option: str, cast: Callable[..., _T1], default: Undefined = undefined) -> _T1: ...
+@overload
+def config(option: str, cast: Callable[..., _T1], default: _T2 = undefined) -> _T1 | _T2: ...
 def config(*args, **kwargs):
     """Access configuration values through the current config instance."""
     return get_config()(*args, **kwargs)
@@ -289,8 +301,8 @@ def execute(source_volume: str, batch_set_id: str, pipeline: str):
     batch_directory = initialize_batch_directory(source_volume, batch_set_id, pipeline)
     ## delete any FILES_TO_REMOVE
     for f in batch_directory.glob("**/*"):
-        if f.is_file() and f.name in config(
-            "FILES_TO_REMOVE", default=None, cast=Csv()
+        if f.is_file() and f.name in (
+            config("FILES_TO_REMOVE", default=None, cast=Csv()) or []
         ):
             f.unlink()
     ## THE LOOP THAT HAS EVERYTHING IN IT
@@ -728,8 +740,8 @@ def validate_source_path(volume_name: str):
 def delete_files_to_remove(parent_path: Path):
     """Delete any files in the parent path that are listed in FILES_TO_REMOVE."""
     for f in parent_path.glob("**/*"):
-        if f.is_file() and f.name in config(
-            "FILES_TO_REMOVE", default=None, cast=Csv()
+        if f.is_file() and f.name in (
+            config("FILES_TO_REMOVE", default=None, cast=Csv()) or []
         ):
             f.unlink()
     return
