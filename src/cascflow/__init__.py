@@ -1,3 +1,4 @@
+from . import ocfl
 from .cascflow import (
     setup_logging,
     update_digital_object,
@@ -31,6 +32,7 @@ from .cascflow import (
 )
 
 __all__ = [
+    "ocfl",
     "setup_logging",
     "update_digital_object",
     "save_digital_object_file_versions",
