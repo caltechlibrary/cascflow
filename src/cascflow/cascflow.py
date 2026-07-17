@@ -1,4 +1,5 @@
 import configparser
+import copy
 import http.client
 import logging
 import logging.config
@@ -313,6 +314,7 @@ def execute(source_volume: str, batch_set_id: str, pipeline: str):
         logger.info(
             f"☑️ ARCHIVAL OBJECT: [{archival_object['component_id']}]({str(config('ARCHIVESSPACE_STAFF_URL')).rstrip('/')}/resolve/readonly?uri={archival_object['uri']})"
         )
+        archival_object = enrich_ancestors(archival_object)
         arrangement = get_arrangement(archival_object)
         stage_2_path_obj = move_to_stage_2(stage_1_path_obj, batch_directory)
         if stage_2_path_obj.is_file():
@@ -497,6 +499,26 @@ def find_archival_object(component_id):
         ).json()
         logger.debug(f"🐞 ARCHIVAL OBJECT FOUND: {component_id}")
         return archival_object
+
+
+def enrich_ancestors(archival_object: dict) -> dict:
+    """Resolve each ancestor's own linked_agents and subjects inline.
+
+    find_archival_object()'s `resolve[]=ancestors` only resolves one level
+    deep: each ancestor gets its own base fields (title, id_0,
+    display_string, etc.) but not its own linked_agents or subjects.
+    ArchivesSpace's resolve[] has no nested/chained syntax for pulling those
+    in via a single request, so getting them requires one additional GET
+    per ancestor.
+
+    Returns a new dict; does not mutate `archival_object`.
+    """
+    archival_object = copy.deepcopy(archival_object)
+    for ancestor in archival_object.get("ancestors", []):
+        ancestor["_resolved"] = archivesspace_get(
+            ancestor["ref"] + "?resolve[]=linked_agents&resolve[]=subjects"
+        ).json()
+    return archival_object
 
 
 @ensure_s3_connection
