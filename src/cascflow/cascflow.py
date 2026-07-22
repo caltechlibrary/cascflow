@@ -93,9 +93,13 @@ def save_digital_object_file_versions(archival_object, new_file_versions):
         if "digital_object" in instance.keys():
             # ASSUMPTION: only one digital_object exists per archival_object
             # TODO handle multiple digital_objects per archival_object
-            existing_file_versions = instance["digital_object"]["_resolved"].get(
-                "file_versions"
-            )
+            # Re-fetch fresh rather than trusting archival_object's embedded
+            # digital_object["_resolved"] snapshot: that snapshot's
+            # lock_version can go stale by the time this runs (e.g. an
+            # archival_object save in between can bump the linked
+            # digital_object's lock_version), which 409s the update below.
+            digital_object = archivesspace_get(instance["digital_object"]["ref"]).json()
+            existing_file_versions = digital_object.get("file_versions")
             # create temporary dictionary of new_file_version values keyed by file_uri
             new_file_uri_values = {
                 new_file_version["file_uri"]: new_file_version
@@ -111,7 +115,6 @@ def save_digital_object_file_versions(archival_object, new_file_versions):
                     )
             # discard keys and create list of unique file_version dictionaries
             file_versions = list(new_file_uri_values.values())
-            digital_object = instance["digital_object"]["_resolved"]
             digital_object["title"] = archival_object["title"]
             digital_object["file_versions"] = file_versions
             digital_object["publish"] = True
