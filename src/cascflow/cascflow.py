@@ -486,13 +486,15 @@ def find_archival_object(component_id):
         f"/repositories/2/find_by_id/archival_objects?component_id[]={component_id}"
     )
     find_by_id_response = archivesspace_get(find_uri)
-    if len(find_by_id_response.json()["archival_objects"]) < 1:
+    matches = find_by_id_response.json()["archival_objects"]
+    if len(matches) < 1:
         raise ValueError(f"❌ ARCHIVAL OBJECT NOT FOUND: {component_id}")
-    elif len(find_by_id_response.json()["archival_objects"]) > 1:
-        raise ValueError(f"❌ MULTIPLE ARCHIVAL OBJECTS FOUND: {component_id}")
+    elif len(matches) > 1:
+        refs = ", ".join(match["ref"] for match in matches)
+        raise ValueError(f"❌ MULTIPLE ARCHIVAL OBJECTS FOUND: {component_id} ({refs})")
     else:
         archival_object = archivesspace_get(
-            find_by_id_response.json()["archival_objects"][0]["ref"]
+            matches[0]["ref"]
             + "?resolve[]=ancestors"
             + "&resolve[]=digital_object"
             + "&resolve[]=linked_agents"
@@ -599,8 +601,9 @@ def validate_metadata_identifier(
             - "identifier_level" (str): Either "resource" or "archival_object".
             - "eligible_archival_objects" (dict): Component IDs mapped to full archival object data
               for objects that exist in ArchivesSpace.
-            - "ineligible_archival_objects" (list[str]): Component IDs of archival objects
-              that do not exist in ArchivesSpace.
+            - "ineligible_archival_objects" (list[dict]): {"component_id", "detail"} for
+              archival objects that don't exist (or aren't uniquely identified) in
+              ArchivesSpace -- "detail" carries find_archival_object()'s actual reason.
 
     Note:
         - Uses Caltech Archives policy: only `id_0` field is used for resource identifiers
@@ -612,7 +615,9 @@ def validate_metadata_identifier(
         {
             "identifier_level": "resource",
             "eligible_archival_objects": {"ComponentID_1": {...archival_object_data...}, "ComponentID_2": {...}},
-            "ineligible_archival_objects": ["ComponentID_3"]
+            "ineligible_archival_objects": [
+                {"component_id": "ComponentID_3", "detail": "❌ ARCHIVAL OBJECT NOT FOUND: ComponentID_3"}
+            ]
         }
 
         >>> validate_metadata_identifier("ComponentID_1", target="files")
@@ -632,8 +637,10 @@ def validate_metadata_identifier(
         try:
             archival_object = find_archival_object(component_id)
             eligible_archival_objects[component_id] = archival_object
-        except ValueError:
-            ineligible_archival_objects.append(component_id)
+        except ValueError as exception:
+            ineligible_archival_objects.append(
+                {"component_id": component_id, "detail": str(exception)}
+            )
         return {
             "eligible_archival_objects": eligible_archival_objects,
             "ineligible_archival_objects": ineligible_archival_objects,
@@ -801,8 +808,8 @@ def validate_digital_files(context: str) -> dict:
             - "source_path" (Path): The resolved source path.
             - "eligible_archival_objects" (dict): Component IDs mapped to full archival object data
               for objects that passed validation.
-            - "ineligible_archival_objects" (list): A list of archival object identifiers
-              that failed validation.
+            - "ineligible_archival_objects" (list[dict]): {"component_id", "detail"} for
+              archival objects that failed validation -- "detail" carries the reason.
             - "nested_directories" (list): A list of directories containing subdirectories.
             - "empty_directories" (list): A list of directories that are empty.
             - "file_count" (int): The total number of files in the source path and its
@@ -826,7 +833,9 @@ def validate_digital_files(context: str) -> dict:
         {
             "source_path": PosixPath("/path/to/source"),
             "eligible_archival_objects": {"obj1": {...archival_object_data...}, "obj2": {...}},
-            "ineligible_archival_objects": ["obj3"],
+            "ineligible_archival_objects": [
+                {"component_id": "obj3", "detail": "❌ ARCHIVAL OBJECT NOT FOUND: obj3"}
+            ],
             "nested_directories": [PosixPath("/path/to/source/nested_dir")],
             "empty_directories": [PosixPath("/path/to/source/empty_dir")],
             "file_count": 42,

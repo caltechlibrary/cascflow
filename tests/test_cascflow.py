@@ -74,6 +74,55 @@ def test_enrich_ancestors_handles_no_ancestors_key():
     assert result == {"component_id": "aspace_1"}
 
 
+def test_validate_metadata_identifier_carries_not_found_detail(monkeypatch):
+    monkeypatch.setattr(
+        cascflow_module,
+        "archivesspace_get",
+        lambda uri, params=None: FakeResponse({"archival_objects": []}),
+    )
+
+    result = cascflow_module.validate_metadata_identifier("missing_1")
+
+    assert result["eligible_archival_objects"] == {}
+    assert result["ineligible_archival_objects"] == [
+        {
+            "component_id": "missing_1",
+            "detail": "❌ ARCHIVAL OBJECT NOT FOUND: missing_1",
+        }
+    ]
+
+
+def test_validate_metadata_identifier_carries_multiple_found_detail_with_refs(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        cascflow_module,
+        "archivesspace_get",
+        lambda uri, params=None: FakeResponse(
+            {
+                "archival_objects": [
+                    {"ref": "/repositories/2/archival_objects/1"},
+                    {"ref": "/repositories/2/archival_objects/2"},
+                ]
+            }
+        ),
+    )
+
+    result = cascflow_module.validate_metadata_identifier("dup_1")
+
+    assert result["eligible_archival_objects"] == {}
+    assert result["ineligible_archival_objects"] == [
+        {
+            "component_id": "dup_1",
+            "detail": (
+                "❌ MULTIPLE ARCHIVAL OBJECTS FOUND: dup_1 "
+                "(/repositories/2/archival_objects/1, "
+                "/repositories/2/archival_objects/2)"
+            ),
+        }
+    ]
+
+
 def test_save_digital_object_file_versions_refetches_instead_of_trusting_resolved(
     monkeypatch,
 ):
