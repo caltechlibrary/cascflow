@@ -225,6 +225,33 @@ def test_add_version_omits_fixity_block_when_not_provided():
     assert "fixity" not in result
 
 
+def test_add_version_omits_message_when_not_provided():
+    result = ocfl.add_version(
+        ocfl.build_inventory("id1"), {"a.txt": "sha_a"}, created="t1"
+    )
+
+    assert "message" not in result["versions"]["v0001"]
+
+
+def test_add_version_omits_user_when_user_name_not_provided():
+    result = ocfl.add_version(
+        ocfl.build_inventory("id1"), {"a.txt": "sha_a"}, created="t1"
+    )
+
+    assert "user" not in result["versions"]["v0001"]
+
+
+def test_add_version_omits_address_when_user_address_not_provided():
+    result = ocfl.add_version(
+        ocfl.build_inventory("id1"),
+        {"a.txt": "sha_a"},
+        created="t1",
+        user_name="distillery",
+    )
+
+    assert result["versions"]["v0001"]["user"] == {"name": "distillery"}
+
+
 def test_add_version_accumulates_fixity_across_versions():
     v1 = ocfl.add_version(
         ocfl.build_inventory("id1"),

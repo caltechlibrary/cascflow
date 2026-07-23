@@ -101,6 +101,11 @@ def add_version(
     `{"md5": {"a.tif": "<md5 hex>"}}`. Purely supplementary -- OCFL itself
     only relies on `digestAlgorithm`/`manifest` for integrity checking.
 
+    `message`, `user_name`, and `user_address` are all optional per the OCFL
+    spec and are omitted from the version block entirely when not provided,
+    rather than being written as empty strings. `user_address` is only
+    meaningful (and only included) when `user_name` is also given.
+
     Does not mutate `inventory`.
     """
     inventory = copy.deepcopy(inventory)
@@ -124,12 +129,15 @@ def add_version(
             manifest[digest] = [f"{version_id}/content/{logical_path}"]
         content_path_by_logical_path[logical_path] = manifest[digest][0]
 
-    inventory["versions"][version_id] = {
-        "created": created,
-        "state": state,
-        "message": message,
-        "user": {"name": user_name, "address": user_address},
-    }
+    version = {"created": created, "state": state}
+    if message:
+        version["message"] = message
+    if user_name:
+        user = {"name": user_name}
+        if user_address:
+            user["address"] = user_address
+        version["user"] = user
+    inventory["versions"][version_id] = version
     inventory["head"] = version_id
 
     if fixity:
