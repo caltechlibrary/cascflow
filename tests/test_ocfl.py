@@ -89,6 +89,38 @@ def test_object_root_path_matches_extension_defaults():
     assert path == "000/000/abc/abc"
 
 
+def test_build_extension_0007_config_uses_extension_defaults():
+    config = ocfl.build_extension_0007_config()
+
+    assert config == {
+        "extensionName": ocfl.OCFL_EXTENSION_0007_NAME,
+        "delimiter": ":",
+        "tupleSize": 3,
+        "numberOfTuples": 3,
+        "zeroPadding": "left",
+        "reverseObjectRoot": False,
+    }
+
+
+def test_build_extension_0007_config_reflects_custom_parameters():
+    config = ocfl.build_extension_0007_config(
+        delimiter="/",
+        tuple_size=3,
+        number_of_tuples=2,
+        zero_padding="right",
+        reverse_object_root=True,
+    )
+
+    assert config == {
+        "extensionName": ocfl.OCFL_EXTENSION_0007_NAME,
+        "delimiter": "/",
+        "tupleSize": 3,
+        "numberOfTuples": 2,
+        "zeroPadding": "right",
+        "reverseObjectRoot": True,
+    }
+
+
 def test_build_inventory_returns_versionless_shell_with_supplied_id():
     inventory = ocfl.build_inventory("https://n2t.net/ark:99999/b3xq7z")
 

@@ -8,6 +8,7 @@ https://ocfl.github.io/extensions/0007-n-tuple-omit-prefix-storage-layout.html
 import copy
 
 OCFL_INVENTORY_TYPE = "https://ocfl.io/1.1/spec/#inventory"
+OCFL_EXTENSION_0007_NAME = "0007-n-tuple-omit-prefix-storage-layout"
 
 
 def object_root_path(
@@ -56,6 +57,30 @@ def object_root_path(
     ]
 
     return "/".join([*tuples, remainder])
+
+
+def build_extension_0007_config(
+    delimiter: str = ":",
+    tuple_size: int = 3,
+    number_of_tuples: int = 3,
+    zero_padding: str = "left",
+    reverse_object_root: bool = False,
+) -> dict:
+    """Return the Extension 0007 (N Tuple Omit Prefix Storage Layout)
+    config.json document for these parameters.
+
+    Same parameter names and defaults as `object_root_path()` -- a caller
+    passing identical kwargs to both is guaranteed the recorded config
+    matches the paths actually being derived.
+    """
+    return {
+        "extensionName": OCFL_EXTENSION_0007_NAME,
+        "delimiter": delimiter,
+        "tupleSize": tuple_size,
+        "numberOfTuples": number_of_tuples,
+        "zeroPadding": zero_padding,
+        "reverseObjectRoot": reverse_object_root,
+    }
 
 
 def build_inventory(object_id: str, digest_algorithm: str = "sha256") -> dict:
