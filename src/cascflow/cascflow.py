@@ -5,6 +5,7 @@ import logging
 import logging.config
 import os
 import shutil
+import time
 
 from pathlib import Path
 from typing import Callable, TypeVar, overload
@@ -426,6 +427,46 @@ def s3_put_object(bucket: str, key: str, body=b"", content_type: str = ""):
     except Exception as e:
         logger.error(f"❌ ERROR PUTTING OBJECT: {e}")
         raise e
+
+
+def invalidate_cloudfront_paths(
+    distribution: str, paths: list | None = None, caller_reference: str = ""
+) -> None:
+    """Create a CloudFront invalidation and block until it completes.
+
+    `distribution` is always required -- callers use different
+    distribution ID settings (e.g. a resolver, IIIF, or public-access
+    distribution), so there's no single sensible default to fall back to
+    here. Blocks synchronously (CloudFront invalidations commonly take
+    several minutes), so callers processing many paths should accumulate
+    them and invalidate once, not call this per item.
+    """
+    if not caller_reference:
+        caller_reference = str(time.time())
+    cloudfront_client = boto3.client(
+        "cloudfront",
+        aws_access_key_id=config("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=config("AWS_SECRET_ACCESS_KEY"),
+    )
+    if paths is None:
+        paths = ["/*"]
+    # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/cloudfront/client/create_invalidation.html
+    response = cloudfront_client.create_invalidation(
+        DistributionId=distribution,
+        InvalidationBatch={
+            "Paths": {"Quantity": len(paths), "Items": paths},
+            "CallerReference": caller_reference,
+        },
+    )
+    logger.debug(f"🐞 CLOUDFRONT INVALIDATION RESPONSE: {response}")
+    # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/cloudfront/waiter/InvalidationCompleted.html
+    waiter = cloudfront_client.get_waiter("invalidation_completed")
+    logger.debug("🐞 WAITING ON CLOUDFRONT INVALIDATION")
+    waiter.wait(
+        DistributionId=distribution,
+        Id=response["Invalidation"]["Id"],
+    )
+    logger.debug("🐞 CLOUDFRONT INVALIDATION COMPLETE")
 
 
 @backoff.on_exception(

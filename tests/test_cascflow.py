@@ -213,3 +213,81 @@ def test_s3_put_object_omits_body_and_content_type_when_not_provided(monkeypatch
     cascflow_module.s3_put_object("my-bucket", "some/key")
 
     assert put_calls == [{"Bucket": "my-bucket", "Key": "some/key"}]
+
+
+def test_invalidate_cloudfront_paths_creates_invalidation_and_waits(monkeypatch):
+    monkeypatch.setattr(
+        cascflow_module,
+        "config",
+        lambda key, **kwargs: {
+            "AWS_ACCESS_KEY_ID": "key",
+            "AWS_SECRET_ACCESS_KEY": "secret",
+        }.get(key),
+    )
+    create_invalidation_calls = []
+    wait_calls = []
+
+    class FakeWaiter:
+        def wait(self, **kwargs):
+            wait_calls.append(kwargs)
+
+    class FakeCloudFrontClient:
+        def create_invalidation(self, **kwargs):
+            create_invalidation_calls.append(kwargs)
+            return {"Invalidation": {"Id": "INV123"}}
+
+        def get_waiter(self, name):
+            assert name == "invalidation_completed"
+            return FakeWaiter()
+
+    def fake_boto3_client(service, **kwargs):
+        assert service == "cloudfront"
+        return FakeCloudFrontClient()
+
+    monkeypatch.setattr(cascflow_module.boto3, "client", fake_boto3_client)
+
+    cascflow_module.invalidate_cloudfront_paths(
+        "DIST123", paths=["/ark:77914/b3xq7z/*"], caller_reference="fixed-ref"
+    )
+
+    assert len(create_invalidation_calls) == 1
+    call = create_invalidation_calls[0]
+    assert call["DistributionId"] == "DIST123"
+    assert call["InvalidationBatch"]["Paths"] == {
+        "Quantity": 1,
+        "Items": ["/ark:77914/b3xq7z/*"],
+    }
+    assert call["InvalidationBatch"]["CallerReference"] == "fixed-ref"
+    assert wait_calls == [{"DistributionId": "DIST123", "Id": "INV123"}]
+
+
+def test_invalidate_cloudfront_paths_defaults_to_wildcard_when_no_paths_given(
+    monkeypatch,
+):
+    monkeypatch.setattr(cascflow_module, "config", lambda key, **kwargs: "unused")
+    create_invalidation_calls = []
+
+    class FakeWaiter:
+        def wait(self, **kwargs):
+            pass
+
+    class FakeCloudFrontClient:
+        def create_invalidation(self, **kwargs):
+            create_invalidation_calls.append(kwargs)
+            return {"Invalidation": {"Id": "INV123"}}
+
+        def get_waiter(self, name):
+            return FakeWaiter()
+
+    monkeypatch.setattr(
+        cascflow_module.boto3,
+        "client",
+        lambda service, **kwargs: FakeCloudFrontClient(),
+    )
+
+    cascflow_module.invalidate_cloudfront_paths("DIST123", caller_reference="fixed-ref")
+
+    assert create_invalidation_calls[0]["InvalidationBatch"]["Paths"] == {
+        "Quantity": 1,
+        "Items": ["/*"],
+    }
