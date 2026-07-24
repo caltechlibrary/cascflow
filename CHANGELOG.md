@@ -1,5 +1,14 @@
 # Cascflow Changelog
 
+## 4.3.3
+
+- add `ocfl.build_extension_0007_config()` for recording Extension 0007's storage-layout parameters in a storage root's `config.json` (OCFL 1.1 §3.1)
+
+## 4.3.2
+
+- add `invalidate_cloudfront_paths()`, a shared CloudFront invalidation helper (moved out of Alchemist's own copy, which had an identical implementation)
+- add an optional `content_type` parameter to `s3_put_object()`
+
 ## 4.3.1
 
 - `ocfl.add_version()` now omits `message`/`user`/`user.address` from the version block entirely when not provided, instead of writing them as empty strings (all optional per the OCFL spec)
