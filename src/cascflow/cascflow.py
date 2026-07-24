@@ -411,21 +411,16 @@ def s3_get_object(bucket, key):
 
 
 @ensure_s3_connection
-def s3_put_object(bucket: str, key: str, body=b""):
+def s3_put_object(bucket: str, key: str, body=b"", content_type: str = ""):
     """Put an object to S3."""
     assert s3_client is not None, "🐞 s3_client cannot be None"
     try:
-        if not body:
-            response = s3_client.put_object(
-                Bucket=bucket,
-                Key=key,
-            )
-        else:
-            response = s3_client.put_object(
-                Bucket=bucket,
-                Key=key,
-                Body=body,
-            )
+        kwargs = {"Bucket": bucket, "Key": key}
+        if body:
+            kwargs["Body"] = body
+        if content_type:
+            kwargs["ContentType"] = content_type
+        response = s3_client.put_object(**kwargs)
         logger.debug(f"☑️ OBJECT PUT TO S3: {bucket}/{key}")
         return response
     except Exception as e:

@@ -173,3 +173,43 @@ def test_save_digital_object_file_versions_refetches_instead_of_trusting_resolve
         "http://example.com/new.tif",
         "http://example.com/existing.tif",
     }
+
+
+def test_s3_put_object_passes_body_and_content_type(monkeypatch):
+    put_calls = []
+
+    class FakeS3Client:
+        def put_object(self, **kwargs):
+            put_calls.append(kwargs)
+
+    monkeypatch.setattr(cascflow_module, "s3_client", FakeS3Client())
+
+    cascflow_module.s3_put_object(
+        "my-bucket",
+        "ark:77914/b3xq7z/inventory.json",
+        body=b"{}",
+        content_type="application/json",
+    )
+
+    assert put_calls == [
+        {
+            "Bucket": "my-bucket",
+            "Key": "ark:77914/b3xq7z/inventory.json",
+            "Body": b"{}",
+            "ContentType": "application/json",
+        }
+    ]
+
+
+def test_s3_put_object_omits_body_and_content_type_when_not_provided(monkeypatch):
+    put_calls = []
+
+    class FakeS3Client:
+        def put_object(self, **kwargs):
+            put_calls.append(kwargs)
+
+    monkeypatch.setattr(cascflow_module, "s3_client", FakeS3Client())
+
+    cascflow_module.s3_put_object("my-bucket", "some/key")
+
+    assert put_calls == [{"Bucket": "my-bucket", "Key": "some/key"}]
