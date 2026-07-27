@@ -179,6 +179,99 @@ def test_save_digital_object_file_versions_refetches_instead_of_trusting_resolve
     }
 
 
+def test_save_digital_object_file_versions_reorders_into_canonical_use_statement_order(
+    monkeypatch,
+):
+    # Reproduces the reported bug: Distillery runs after Alchemist has
+    # already published web-access file_versions, and its own
+    # OCFL-Object-Inventory entries must land after the last Web-Access
+    # entry, not wherever dict-merge order happens to put them.
+    archival_object = {
+        "title": "A Title",
+        "external_ark_url": "https://n2t.net/ark:99999/b3xq7z",
+        "instances": [
+            {
+                "instance_type": "digital_object",
+                "digital_object": {"ref": "/repositories/2/digital_objects/1"},
+            }
+        ],
+    }
+    current_digital_object = {
+        "uri": "/repositories/2/digital_objects/1",
+        "file_versions": [
+            {
+                "file_uri": "http://example.com/thumb.jpg",
+                "use_statement": "image-thumbnail",
+            },
+            {
+                "file_uri": "https://n2t.net/ark:99999/b3xq7z",
+                "use_statement": "Persistent-URL",
+            },
+            {
+                "file_uri": "http://example.com/access.tif",
+                "use_statement": "Web-Access",
+            },
+        ],
+    }
+    monkeypatch.setattr(
+        cascflow_module,
+        "archivesspace_get",
+        lambda uri, params=None: FakeResponse(current_digital_object),
+    )
+    monkeypatch.setattr(
+        cascflow_module, "archivesspace_post", lambda uri, obj: FakeResponse(obj)
+    )
+
+    cascflow_module.save_digital_object_file_versions(
+        archival_object,
+        [
+            {
+                "file_uri": "file:///nas/path/inventory.json",
+                "use_statement": "OCFL-Object-Inventory",
+            },
+            {
+                "file_uri": "https://n2t.net/ark:99999/b3xq7z/inventory.json",
+                "use_statement": "OCFL-Object-Inventory",
+            },
+        ],
+    )
+
+    assert [fv["use_statement"] for fv in current_digital_object["file_versions"]] == [
+        "image-thumbnail",
+        "Persistent-URL",
+        "Web-Access",
+        "OCFL-Object-Inventory",
+        "OCFL-Object-Inventory",
+    ]
+
+
+def test_sort_file_versions_orders_by_canonical_use_statement():
+    file_versions = [
+        {"file_uri": "d", "use_statement": "URL-Redirected"},
+        {"file_uri": "c", "use_statement": "OCFL-Object-Inventory"},
+        {"file_uri": "b", "use_statement": "Web-Access"},
+        {"file_uri": "a", "use_statement": "Persistent-URL"},
+        {"file_uri": "e", "use_statement": "image-thumbnail"},
+    ]
+
+    result = cascflow_module.sort_file_versions(file_versions)
+
+    assert [fv["file_uri"] for fv in result] == ["e", "a", "b", "c", "d"]
+
+
+def test_sort_file_versions_puts_unrecognized_use_statement_last_and_stable():
+    file_versions = [
+        {"file_uri": "a", "use_statement": "Web-Access"},
+        {"file_uri": "b", "use_statement": "some-legacy-value"},
+        {"file_uri": "c"},
+        {"file_uri": "d", "use_statement": "image-thumbnail"},
+    ]
+
+    result = cascflow_module.sort_file_versions(file_versions)
+
+    assert [fv["file_uri"] for fv in result] == ["d", "a", "b", "c"]
+
+
 def test_save_digital_object_file_versions_raises_without_external_ark_url(
     monkeypatch,
 ):

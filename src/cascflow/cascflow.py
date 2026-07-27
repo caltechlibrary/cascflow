@@ -109,6 +109,37 @@ def update_digital_object(uri, data):
     return response
 
 
+# Canonical order for a digital_object's file_versions. image-thumbnail
+# must lead (ArchivesSpace's representative-image linking in the public UI
+# depends on it); the rest is Caltech convention: Persistent-URL and
+# Web-Access are Alchemist's, OCFL-Object-Inventory is Distillery's, and
+# URL-Redirected is a legacy use_statement some older records still carry
+# (nothing here creates new ones, but existing ones must still sort last).
+FILE_VERSION_USE_STATEMENT_ORDER = [
+    "image-thumbnail",
+    "Persistent-URL",
+    "Web-Access",
+    "OCFL-Object-Inventory",
+    "URL-Redirected",
+]
+
+
+def sort_file_versions(file_versions: list) -> list:
+    """Return file_versions sorted into FILE_VERSION_USE_STATEMENT_ORDER.
+    file_versions sharing a use_statement keep their relative order (stable
+    sort); an unrecognized use_statement sorts after all recognized ones."""
+
+    def sort_key(file_version):
+        try:
+            return FILE_VERSION_USE_STATEMENT_ORDER.index(
+                file_version.get("use_statement")
+            )
+        except ValueError:
+            return len(FILE_VERSION_USE_STATEMENT_ORDER)
+
+    return sorted(file_versions, key=sort_key)
+
+
 def save_digital_object_file_versions(archival_object, new_file_versions):
     for instance in archival_object["instances"]:
         if "digital_object" in instance.keys():
@@ -135,7 +166,7 @@ def save_digital_object_file_versions(archival_object, new_file_versions):
                         existing_file_version
                     )
             # discard keys and create list of unique file_version dictionaries
-            file_versions = list(new_file_uri_values.values())
+            file_versions = sort_file_versions(list(new_file_uri_values.values()))
             digital_object["digital_object_id"] = digital_object_id_for_archival_object(
                 archival_object
             )
