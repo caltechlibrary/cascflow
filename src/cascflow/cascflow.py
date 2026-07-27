@@ -81,6 +81,26 @@ def fallback_logging():
     print("LOGGING CONFIGURED USING basicConfig FALLBACK")
 
 
+def ark_base_compact_name(external_ark_url: str) -> str:
+    """Return the ARK Base Compact Name (e.g. "ark:77914/b3xq7z") from a
+    full resolvable ARK URL (e.g. "https://n2t.net/ark:77914/b3xq7z")."""
+    return "ark:" + external_ark_url.split("ark:", 1)[1]
+
+
+def digital_object_id_for_archival_object(archival_object: dict) -> str:
+    """Return the digital_object_id to use for archival_object's
+    digital_object, derived from its ARK. Raises if archival_object has no
+    external_ark_url yet -- an ARK must be minted before a digital_object
+    can be created or updated for it."""
+    external_ark_url = archival_object.get("external_ark_url")
+    if not external_ark_url:
+        raise ValueError(
+            "❌ CANNOT DETERMINE digital_object_id: NO external_ark_url ON "
+            f"ARCHIVAL OBJECT: {archival_object.get('component_id', archival_object.get('uri', ''))}"
+        )
+    return ark_base_compact_name(external_ark_url)
+
+
 def update_digital_object(uri, data):
     # raises an HTTPError exception if unsuccessful
     response = archivesspace_post(uri, data)
@@ -116,6 +136,9 @@ def save_digital_object_file_versions(archival_object, new_file_versions):
                     )
             # discard keys and create list of unique file_version dictionaries
             file_versions = list(new_file_uri_values.values())
+            digital_object["digital_object_id"] = digital_object_id_for_archival_object(
+                archival_object
+            )
             digital_object["title"] = archival_object["title"]
             digital_object["file_versions"] = file_versions
             digital_object["publish"] = True
@@ -125,7 +148,9 @@ def save_digital_object_file_versions(archival_object, new_file_versions):
 def create_digital_object(archival_object, digital_object_type=""):
     digital_object = {}
     digital_object_uri = ""
-    digital_object["digital_object_id"] = archival_object["component_id"]  # required
+    digital_object["digital_object_id"] = digital_object_id_for_archival_object(
+        archival_object
+    )  # required
     digital_object["title"] = archival_object["title"]  # required
     if digital_object_type:
         digital_object["digital_object_type"] = digital_object_type
@@ -160,7 +185,7 @@ def create_digital_object(archival_object, digital_object_type=""):
                 in digital_object_post_response.json()["error"]["digital_object_id"]
             ):
                 raise ValueError(
-                    f"❌ NON-UNIQUE DIGITAL_OBJECT_ID: {archival_object['component_id']}"
+                    f"❌ NON-UNIQUE DIGITAL_OBJECT_ID: {digital_object['digital_object_id']}"
                 )
         else:
             raise RuntimeError(

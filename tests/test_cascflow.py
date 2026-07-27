@@ -1,3 +1,5 @@
+import pytest
+
 from cascflow import cascflow as cascflow_module
 
 
@@ -133,6 +135,7 @@ def test_save_digital_object_file_versions_refetches_instead_of_trusting_resolve
     # "_resolved" key here at all, to prove it's not read.
     archival_object = {
         "title": "A Title",
+        "external_ark_url": "https://n2t.net/ark:99999/b3xq7z",
         "instances": [
             {
                 "instance_type": "digital_object",
@@ -169,10 +172,113 @@ def test_save_digital_object_file_versions_refetches_instead_of_trusting_resolve
     assert posted_uri == "/repositories/2/digital_objects/1"
     assert posted_digital_object["lock_version"] == 5
     assert posted_digital_object["title"] == "A Title"
+    assert posted_digital_object["digital_object_id"] == "ark:99999/b3xq7z"
     assert {fv["file_uri"] for fv in posted_digital_object["file_versions"]} == {
         "http://example.com/new.tif",
         "http://example.com/existing.tif",
     }
+
+
+def test_save_digital_object_file_versions_raises_without_external_ark_url(
+    monkeypatch,
+):
+    archival_object = {
+        "title": "A Title",
+        "instances": [
+            {
+                "instance_type": "digital_object",
+                "digital_object": {"ref": "/repositories/2/digital_objects/1"},
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        cascflow_module,
+        "archivesspace_get",
+        lambda uri, params=None: FakeResponse(
+            {"uri": "/repositories/2/digital_objects/1", "file_versions": []}
+        ),
+    )
+
+    with pytest.raises(ValueError, match="external_ark_url"):
+        cascflow_module.save_digital_object_file_versions(
+            archival_object, [{"file_uri": "http://example.com/new.tif"}]
+        )
+
+
+def test_ark_base_compact_name_strips_scheme_and_host():
+    assert (
+        cascflow_module.ark_base_compact_name("https://n2t.net/ark:99999/b3xq7z")
+        == "ark:99999/b3xq7z"
+    )
+
+
+def test_digital_object_id_for_archival_object_returns_ark_base_compact_name():
+    archival_object = {"external_ark_url": "https://n2t.net/ark:99999/b3xq7z"}
+
+    assert (
+        cascflow_module.digital_object_id_for_archival_object(archival_object)
+        == "ark:99999/b3xq7z"
+    )
+
+
+def test_digital_object_id_for_archival_object_raises_when_missing():
+    archival_object = {"component_id": "aspace_1"}
+
+    with pytest.raises(ValueError, match="aspace_1"):
+        cascflow_module.digital_object_id_for_archival_object(archival_object)
+
+
+def test_create_digital_object_uses_ark_based_digital_object_id(monkeypatch):
+    archival_object = {
+        "uri": "/repositories/2/archival_objects/1",
+        "component_id": "aspace_1",
+        "title": "A Title",
+        "external_ark_url": "https://n2t.net/ark:99999/b3xq7z",
+        "instances": [],
+    }
+    post_calls = []
+
+    def fake_archivesspace_post(uri, obj):
+        post_calls.append((uri, obj))
+        if uri == "/repositories/2/digital_objects":
+            return FakeResponse(
+                {"uri": "/repositories/2/digital_objects/1", "status": "Created"}
+            )
+        return FakeResponse(obj)
+
+    monkeypatch.setattr(cascflow_module, "archivesspace_post", fake_archivesspace_post)
+    monkeypatch.setattr(cascflow_module, "config", lambda key, **kwargs: "unused")
+    monkeypatch.setattr(
+        cascflow_module,
+        "find_archival_object",
+        lambda component_id: archival_object,
+    )
+
+    cascflow_module.create_digital_object(archival_object)
+
+    digital_object_uri, posted_digital_object = post_calls[0]
+    assert digital_object_uri == "/repositories/2/digital_objects"
+    assert posted_digital_object["digital_object_id"] == "ark:99999/b3xq7z"
+
+
+def test_create_digital_object_raises_without_external_ark_url(monkeypatch):
+    archival_object = {
+        "uri": "/repositories/2/archival_objects/1",
+        "component_id": "aspace_1",
+        "title": "A Title",
+        "instances": [],
+    }
+    post_calls = []
+    monkeypatch.setattr(
+        cascflow_module,
+        "archivesspace_post",
+        lambda uri, obj: post_calls.append((uri, obj)),
+    )
+
+    with pytest.raises(ValueError, match="external_ark_url"):
+        cascflow_module.create_digital_object(archival_object)
+
+    assert post_calls == []
 
 
 def test_s3_put_object_passes_body_and_content_type(monkeypatch):
