@@ -1,5 +1,11 @@
 # Cascflow Changelog
 
+## 4.4.0
+
+- `create_digital_object()`/`save_digital_object_file_versions()` now derive `digital_object_id` from the archival object's ARK (`digital_object_id_for_archival_object()`) instead of `component_id`; raises if `external_ark_url` isn't set yet
+- move `ark_base_compact_name()` here from Distillery so both it and Alchemist can share it
+- `save_digital_object_file_versions()` now sorts `file_versions` into a canonical `use_statement` order (`image-thumbnail`, `Persistent-URL`, `Web-Access`, `OCFL-Object-Inventory`, `URL-Redirected`) via the new `sort_file_versions()`, so Distillery's preservation-only file_versions no longer scramble Alchemist's web-access ordering when both touch the same digital_object
+
 ## 4.3.3
 
 - add `ocfl.build_extension_0007_config()` for recording Extension 0007's storage-layout parameters in a storage root's `config.json` (OCFL 1.1 §3.1)
