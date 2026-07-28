@@ -200,7 +200,7 @@ def test_save_digital_object_file_versions_reorders_into_canonical_use_statement
         "uri": "/repositories/2/digital_objects/1",
         "file_versions": [
             {
-                "file_uri": "http://example.com/thumb.jpg",
+                "file_uri": "http://example.com/ark:99999/b3xq7z/thumb.jpg",
                 "use_statement": "image-thumbnail",
             },
             {
@@ -208,7 +208,7 @@ def test_save_digital_object_file_versions_reorders_into_canonical_use_statement
                 "use_statement": "Persistent-URL",
             },
             {
-                "file_uri": "http://example.com/access.tif",
+                "file_uri": "http://example.com/ark:99999/b3xq7z",
                 "use_statement": "Web-Access",
             },
         ],
@@ -243,6 +243,187 @@ def test_save_digital_object_file_versions_reorders_into_canonical_use_statement
         "OCFL-Object-Inventory",
         "OCFL-Object-Inventory",
     ]
+
+
+def test_save_digital_object_file_versions_relabels_legacy_web_access_as_url_redirected(
+    monkeypatch,
+):
+    # A legacy (pre-ARK) Web-Access/image-thumbnail entry being superseded by
+    # a new ARK-based one predates this object's ARK migration -- it should
+    # be relabeled URL-Redirected so it reads as a retired redirect target,
+    # not clutter among current entries.
+    archival_object = {
+        "title": "A Title",
+        "external_ark_url": "https://n2t.net/ark:99999/b3xq7z",
+        "instances": [
+            {
+                "instance_type": "digital_object",
+                "digital_object": {"ref": "/repositories/2/digital_objects/1"},
+            }
+        ],
+    }
+    current_digital_object = {
+        "uri": "/repositories/2/digital_objects/1",
+        "file_versions": [
+            {
+                "file_uri": "https://digital.archives.caltech.edu/collections/collection_1/aspace_1",
+                "use_statement": "Web-Access",
+            },
+            {
+                "file_uri": "https://img.archives.caltech.edu/iiif/2/collections/collection_1/aspace_1/full/200,/0/default.webp",
+                "use_statement": "image-thumbnail",
+            },
+        ],
+    }
+    monkeypatch.setattr(
+        cascflow_module,
+        "archivesspace_get",
+        lambda uri, params=None: FakeResponse(current_digital_object),
+    )
+    monkeypatch.setattr(
+        cascflow_module, "archivesspace_post", lambda uri, obj: FakeResponse(obj)
+    )
+
+    cascflow_module.save_digital_object_file_versions(
+        archival_object,
+        [
+            {
+                "file_uri": "https://digital.archives.caltech.edu/ark:99999/b3xq7z",
+                "use_statement": "Web-Access",
+            },
+            {
+                "file_uri": "https://img.archives.caltech.edu/iiif/2/ark:99999/b3xq7z/0001/full/200,/0/default.webp",
+                "use_statement": "image-thumbnail",
+            },
+        ],
+    )
+
+    by_uri = {
+        fv["file_uri"]: fv for fv in current_digital_object["file_versions"]
+    }
+    legacy_web_access = by_uri[
+        "https://digital.archives.caltech.edu/collections/collection_1/aspace_1"
+    ]
+    legacy_thumbnail = by_uri[
+        "https://img.archives.caltech.edu/iiif/2/collections/collection_1/aspace_1/full/200,/0/default.webp"
+    ]
+    assert legacy_web_access["use_statement"] == "URL-Redirected"
+    assert legacy_web_access["publish"] is False
+    assert legacy_thumbnail["use_statement"] == "URL-Redirected"
+    assert legacy_thumbnail["publish"] is False
+    assert legacy_thumbnail["is_representative"] is False
+
+
+def test_save_digital_object_file_versions_does_not_relabel_same_ark_entry(
+    monkeypatch,
+):
+    # An ARK-based image-thumbnail merely superseded by a newer ARK-based one
+    # (e.g. ptifs re-sequenced) is demoted but NOT relabeled -- it's not a
+    # legacy pre-migration entry, just an ordinary derivative refresh.
+    archival_object = {
+        "title": "A Title",
+        "external_ark_url": "https://n2t.net/ark:99999/b3xq7z",
+        "instances": [
+            {
+                "instance_type": "digital_object",
+                "digital_object": {"ref": "/repositories/2/digital_objects/1"},
+            }
+        ],
+    }
+    current_digital_object = {
+        "uri": "/repositories/2/digital_objects/1",
+        "file_versions": [
+            {
+                "file_uri": "https://img.archives.caltech.edu/iiif/2/ark:99999/b3xq7z/0001/full/200,/0/default.webp",
+                "use_statement": "image-thumbnail",
+            },
+        ],
+    }
+    monkeypatch.setattr(
+        cascflow_module,
+        "archivesspace_get",
+        lambda uri, params=None: FakeResponse(current_digital_object),
+    )
+    monkeypatch.setattr(
+        cascflow_module, "archivesspace_post", lambda uri, obj: FakeResponse(obj)
+    )
+
+    cascflow_module.save_digital_object_file_versions(
+        archival_object,
+        [
+            {
+                "file_uri": "https://img.archives.caltech.edu/iiif/2/ark:99999/b3xq7z/0002/full/200,/0/default.webp",
+                "use_statement": "image-thumbnail",
+            },
+        ],
+    )
+
+    by_uri = {
+        fv["file_uri"]: fv for fv in current_digital_object["file_versions"]
+    }
+    superseded = by_uri[
+        "https://img.archives.caltech.edu/iiif/2/ark:99999/b3xq7z/0001/full/200,/0/default.webp"
+    ]
+    assert superseded["use_statement"] == "image-thumbnail"
+    assert superseded["publish"] is False
+
+
+def test_save_digital_object_file_versions_never_relabels_persistent_url_or_ocfl(
+    monkeypatch,
+):
+    archival_object = {
+        "title": "A Title",
+        "external_ark_url": "https://n2t.net/ark:99999/b3xq7z",
+        "instances": [
+            {
+                "instance_type": "digital_object",
+                "digital_object": {"ref": "/repositories/2/digital_objects/1"},
+            }
+        ],
+    }
+    current_digital_object = {
+        "uri": "/repositories/2/digital_objects/1",
+        "file_versions": [
+            {
+                "file_uri": "https://n2t.net/ark:11111/old-stale",
+                "use_statement": "Persistent-URL",
+            },
+            {
+                "file_uri": "file:///nas/path/old-inventory.json",
+                "use_statement": "OCFL-Object-Inventory",
+            },
+        ],
+    }
+    monkeypatch.setattr(
+        cascflow_module,
+        "archivesspace_get",
+        lambda uri, params=None: FakeResponse(current_digital_object),
+    )
+    monkeypatch.setattr(
+        cascflow_module, "archivesspace_post", lambda uri, obj: FakeResponse(obj)
+    )
+
+    cascflow_module.save_digital_object_file_versions(
+        archival_object,
+        [
+            {
+                "file_uri": "file:///nas/path/new-inventory.json",
+                "use_statement": "OCFL-Object-Inventory",
+            },
+        ],
+    )
+
+    by_uri = {
+        fv["file_uri"]: fv for fv in current_digital_object["file_versions"]
+    }
+    assert (
+        by_uri["https://n2t.net/ark:11111/old-stale"]["use_statement"]
+        == "Persistent-URL"
+    )
+    assert (
+        by_uri["file:///nas/path/old-inventory.json"]["use_statement"]
+        == "OCFL-Object-Inventory"
+    )
 
 
 def test_sort_file_versions_orders_by_canonical_use_statement():
@@ -412,6 +593,82 @@ def test_s3_put_object_omits_body_and_content_type_when_not_provided(monkeypatch
     cascflow_module.s3_put_object("my-bucket", "some/key")
 
     assert put_calls == [{"Bucket": "my-bucket", "Key": "some/key"}]
+
+
+def test_s3_put_object_passes_website_redirect_location(monkeypatch):
+    put_calls = []
+
+    class FakeS3Client:
+        def put_object(self, **kwargs):
+            put_calls.append(kwargs)
+
+    monkeypatch.setattr(cascflow_module, "s3_client", FakeS3Client())
+
+    cascflow_module.s3_put_object(
+        "my-bucket",
+        "collections/collection_1/aspace_1/index.html",
+        website_redirect_location="https://resolver.example.edu/ark:77914/b3xq7z",
+    )
+
+    assert put_calls == [
+        {
+            "Bucket": "my-bucket",
+            "Key": "collections/collection_1/aspace_1/index.html",
+            "WebsiteRedirectLocation": "https://resolver.example.edu/ark:77914/b3xq7z",
+        }
+    ]
+
+
+def test_s3_copy_object_copies_within_same_bucket(monkeypatch):
+    copy_calls = []
+
+    class FakeS3Client:
+        def copy_object(self, **kwargs):
+            copy_calls.append(kwargs)
+
+    monkeypatch.setattr(cascflow_module, "s3_client", FakeS3Client())
+
+    cascflow_module.s3_copy_object(
+        "my-bucket", "collections/collection_1/aspace_1/0001.ptif", "ark:77914/b3xq7z/0001.ptif"
+    )
+
+    assert copy_calls == [
+        {
+            "Bucket": "my-bucket",
+            "CopySource": {
+                "Bucket": "my-bucket",
+                "Key": "collections/collection_1/aspace_1/0001.ptif",
+            },
+            "Key": "ark:77914/b3xq7z/0001.ptif",
+        }
+    ]
+
+
+def test_s3_list_object_keys_paginates(monkeypatch):
+    class FakePaginator:
+        def paginate(self, **kwargs):
+            assert kwargs == {
+                "Bucket": "my-bucket",
+                "Prefix": "collections/collection_1/aspace_1/",
+            }
+            yield {"Contents": [{"Key": "collections/collection_1/aspace_1/0001.ptif"}]}
+            yield {"Contents": [{"Key": "collections/collection_1/aspace_1/0002.ptif"}]}
+
+    class FakeS3Client:
+        def get_paginator(self, name):
+            assert name == "list_objects_v2"
+            return FakePaginator()
+
+    monkeypatch.setattr(cascflow_module, "s3_client", FakeS3Client())
+
+    keys = cascflow_module.s3_list_object_keys(
+        "my-bucket", "collections/collection_1/aspace_1/"
+    )
+
+    assert keys == [
+        "collections/collection_1/aspace_1/0001.ptif",
+        "collections/collection_1/aspace_1/0002.ptif",
+    ]
 
 
 def test_invalidate_cloudfront_paths_creates_invalidation_and_waits(monkeypatch):

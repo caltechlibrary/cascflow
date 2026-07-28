@@ -152,6 +152,7 @@ def save_digital_object_file_versions(archival_object, new_file_versions):
             # digital_object's lock_version), which 409s the update below.
             digital_object = archivesspace_get(instance["digital_object"]["ref"]).json()
             existing_file_versions = digital_object.get("file_versions")
+            our_ark = digital_object_id_for_archival_object(archival_object)
             # create temporary dictionary of new_file_version values keyed by file_uri
             new_file_uri_values = {
                 new_file_version["file_uri"]: new_file_version
@@ -162,14 +163,24 @@ def save_digital_object_file_versions(archival_object, new_file_versions):
                 if existing_file_version["file_uri"] not in new_file_uri_values:
                     existing_file_version["publish"] = False
                     existing_file_version["is_representative"] = False
+                    # An image-thumbnail/Web-Access entry whose file_uri doesn't
+                    # carry our_ark predates this object's ARK migration (as
+                    # opposed to one merely superseded by a newer same-scheme
+                    # entry) -- relabel it so it sorts last (via
+                    # FILE_VERSION_USE_STATEMENT_ORDER) as a legacy redirect
+                    # target rather than clutter among current entries.
+                    if (
+                        existing_file_version.get("use_statement")
+                        in ("image-thumbnail", "Web-Access")
+                        and our_ark not in existing_file_version["file_uri"]
+                    ):
+                        existing_file_version["use_statement"] = "URL-Redirected"
                     new_file_uri_values[existing_file_version["file_uri"]] = (
                         existing_file_version
                     )
             # discard keys and create list of unique file_version dictionaries
             file_versions = sort_file_versions(list(new_file_uri_values.values()))
-            digital_object["digital_object_id"] = digital_object_id_for_archival_object(
-                archival_object
-            )
+            digital_object["digital_object_id"] = our_ark
             digital_object["title"] = archival_object["title"]
             digital_object["file_versions"] = file_versions
             digital_object["publish"] = True
@@ -468,7 +479,13 @@ def s3_get_object(bucket, key):
 
 
 @ensure_s3_connection
-def s3_put_object(bucket: str, key: str, body=b"", content_type: str = ""):
+def s3_put_object(
+    bucket: str,
+    key: str,
+    body=b"",
+    content_type: str = "",
+    website_redirect_location: str = "",
+):
     """Put an object to S3."""
     assert s3_client is not None, "🐞 s3_client cannot be None"
     try:
@@ -477,12 +494,41 @@ def s3_put_object(bucket: str, key: str, body=b"", content_type: str = ""):
             kwargs["Body"] = body
         if content_type:
             kwargs["ContentType"] = content_type
+        if website_redirect_location:
+            kwargs["WebsiteRedirectLocation"] = website_redirect_location
         response = s3_client.put_object(**kwargs)
         logger.debug(f"☑️ OBJECT PUT TO S3: {bucket}/{key}")
         return response
     except Exception as e:
         logger.error(f"❌ ERROR PUTTING OBJECT: {e}")
         raise e
+
+
+@ensure_s3_connection
+def s3_copy_object(bucket: str, source_key: str, dest_key: str):
+    """Copy an object to a new key within the same S3 bucket."""
+    assert s3_client is not None, "🐞 s3_client cannot be None"
+    try:
+        response = s3_client.copy_object(
+            Bucket=bucket, CopySource={"Bucket": bucket, "Key": source_key}, Key=dest_key
+        )
+        logger.debug(f"☑️ OBJECT COPIED IN S3: {bucket}/{source_key} -> {bucket}/{dest_key}")
+        return response
+    except Exception as e:
+        logger.error(f"❌ ERROR COPYING OBJECT: {e}")
+        raise e
+
+
+@ensure_s3_connection
+def s3_list_object_keys(bucket: str, prefix: str) -> list[str]:
+    """List all object keys in bucket under prefix (paginated)."""
+    assert s3_client is not None, "🐞 s3_client cannot be None"
+    keys = []
+    paginator = s3_client.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            keys.append(obj["Key"])
+    return keys
 
 
 def invalidate_cloudfront_paths(
