@@ -1,5 +1,11 @@
 # Cascflow Changelog
 
+## 4.5.0
+
+- `save_digital_object_file_versions()` now relabels a demoted `image-thumbnail`/`Web-Access` file_version as `URL-Redirected` when its `file_uri` predates the object's current ARK, instead of leaving it under its original `use_statement` -- distinguishes a genuine pre-ARK-migration entry (which should read as a retired redirect target) from one merely superseded by a newer same-scheme refresh (e.g. re-sequenced ptifs), which is left alone
+- add `s3_copy_object()` and `s3_list_object_keys()`
+- add an optional `website_redirect_location` parameter to `s3_put_object()`
+
 ## 4.4.0
 
 - `create_digital_object()`/`save_digital_object_file_versions()` now derive `digital_object_id` from the archival object's ARK (`digital_object_id_for_archival_object()`) instead of `component_id`; raises if `external_ark_url` isn't set yet
