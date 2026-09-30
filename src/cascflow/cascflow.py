@@ -267,11 +267,11 @@ def create_digital_object(archival_object, digital_object_type=""):
 
 
 def initialize_batch_directory(source_volume, batch_set_id, pipeline):
-    source_path = Path(config("ABSOLUTE_MOUNT_PARENT")).joinpath(
+    source_path = Path(config("SOURCE_MOUNT_PARENT")).joinpath(
         source_volume, config("RELATIVE_SOURCE_DIRECTORY")
     )
     logger.debug(f"🐞 SOURCE_PATH: {source_path}")
-    batch_directory = Path(config("ABSOLUTE_MOUNT_PARENT")).joinpath(
+    batch_directory = Path(config("SOURCE_MOUNT_PARENT")).joinpath(
         source_volume, config("RELATIVE_BATCH_DIRECTORY"), f"{batch_set_id}--{pipeline}"
     )
     logger.debug(f"🐞 BATCH_DIRECTORY: {batch_directory}")
@@ -903,7 +903,7 @@ def validate_settings(spec: list) -> dict:
 
 
 def validate_source_path(volume_name: str):
-    source_path = Path(config("ABSOLUTE_MOUNT_PARENT")).joinpath(
+    source_path = Path(config("SOURCE_MOUNT_PARENT")).joinpath(
         volume_name, config("RELATIVE_SOURCE_DIRECTORY")
     )
     if not source_path.resolve().exists():

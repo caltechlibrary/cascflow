@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Breaking:** the `ABSOLUTE_MOUNT_PARENT` setting is now `SOURCE_MOUNT_PARENT` (`initialize_batch_directory()`, `validate_source_path()`). The old name predates there being any mount besides the source one; the new name says which mount it is, and pairs with Distillery's `PRESERVATION_MOUNT_PARENT`. Every consumer's `settings.ini` has to be updated in step with the version bump
 - add `OCFL-Object-Root` to `FILE_VERSION_USE_STATEMENT_ORDER`, between `Web-Access` and `OCFL-Object-Inventory` -- Distillery's preservation `file_version` now points at the OCFL object root in the ArchivesVault gateway, and an unrecognized `use_statement` would sort it below even the legacy `URL-Redirected` entries
 
 ## 4.5.0
