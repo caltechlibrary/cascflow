@@ -1,5 +1,9 @@
 # Cascflow Changelog
 
+## Unreleased
+
+- add `OCFL-Object-Root` to `FILE_VERSION_USE_STATEMENT_ORDER`, between `Web-Access` and `OCFL-Object-Inventory` -- Distillery's preservation `file_version` now points at the OCFL object root in the ArchivesVault gateway, and an unrecognized `use_statement` would sort it below even the legacy `URL-Redirected` entries
+
 ## 4.5.0
 
 - `save_digital_object_file_versions()` now relabels a demoted `image-thumbnail`/`Web-Access` file_version as `URL-Redirected` when its `file_uri` predates the object's current ARK, instead of leaving it under its original `use_statement` -- distinguishes a genuine pre-ARK-migration entry (which should read as a retired redirect target) from one merely superseded by a newer same-scheme refresh (e.g. re-sequenced ptifs), which is left alone

@@ -183,9 +183,9 @@ def test_save_digital_object_file_versions_reorders_into_canonical_use_statement
     monkeypatch,
 ):
     # Reproduces the reported bug: Distillery runs after Alchemist has
-    # already published web-access file_versions, and its own
-    # OCFL-Object-Inventory entries must land after the last Web-Access
-    # entry, not wherever dict-merge order happens to put them.
+    # already published web-access file_versions, and its own preservation
+    # entries must land after the last Web-Access entry, not wherever
+    # dict-merge order happens to put them.
     archival_object = {
         "title": "A Title",
         "external_ark_url": "https://n2t.net/ark:99999/b3xq7z",
@@ -226,11 +226,11 @@ def test_save_digital_object_file_versions_reorders_into_canonical_use_statement
         archival_object,
         [
             {
-                "file_uri": "file:///nas/path/inventory.json",
-                "use_statement": "OCFL-Object-Inventory",
+                "file_uri": "https://vault.example.edu/b3x/q7z/b3xq7z/",
+                "use_statement": "OCFL-Object-Root",
             },
             {
-                "file_uri": "https://n2t.net/ark:99999/b3xq7z/inventory.json",
+                "file_uri": "s3://preservation/b3x/q7z/b3xq7z/inventory.json",
                 "use_statement": "OCFL-Object-Inventory",
             },
         ],
@@ -240,7 +240,7 @@ def test_save_digital_object_file_versions_reorders_into_canonical_use_statement
         "image-thumbnail",
         "Persistent-URL",
         "Web-Access",
-        "OCFL-Object-Inventory",
+        "OCFL-Object-Root",
         "OCFL-Object-Inventory",
     ]
 
@@ -428,16 +428,17 @@ def test_save_digital_object_file_versions_never_relabels_persistent_url_or_ocfl
 
 def test_sort_file_versions_orders_by_canonical_use_statement():
     file_versions = [
-        {"file_uri": "d", "use_statement": "URL-Redirected"},
-        {"file_uri": "c", "use_statement": "OCFL-Object-Inventory"},
-        {"file_uri": "b", "use_statement": "Web-Access"},
-        {"file_uri": "a", "use_statement": "Persistent-URL"},
-        {"file_uri": "e", "use_statement": "image-thumbnail"},
+        {"file_uri": "f", "use_statement": "URL-Redirected"},
+        {"file_uri": "d", "use_statement": "OCFL-Object-Root"},
+        {"file_uri": "e", "use_statement": "OCFL-Object-Inventory"},
+        {"file_uri": "c", "use_statement": "Web-Access"},
+        {"file_uri": "b", "use_statement": "Persistent-URL"},
+        {"file_uri": "a", "use_statement": "image-thumbnail"},
     ]
 
     result = cascflow_module.sort_file_versions(file_versions)
 
-    assert [fv["file_uri"] for fv in result] == ["e", "a", "b", "c", "d"]
+    assert [fv["file_uri"] for fv in result] == ["a", "b", "c", "d", "e", "f"]
 
 
 def test_sort_file_versions_puts_unrecognized_use_statement_last_and_stable():

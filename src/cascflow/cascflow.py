@@ -112,13 +112,15 @@ def update_digital_object(uri, data):
 # Canonical order for a digital_object's file_versions. image-thumbnail
 # must lead (ArchivesSpace's representative-image linking in the public UI
 # depends on it); the rest is Caltech convention: Persistent-URL and
-# Web-Access are Alchemist's, OCFL-Object-Inventory is Distillery's, and
-# URL-Redirected is a legacy use_statement some older records still carry
-# (nothing here creates new ones, but existing ones must still sort last).
+# Web-Access are Alchemist's, OCFL-Object-Root and OCFL-Object-Inventory
+# are Distillery's preservation entries, and URL-Redirected is a legacy
+# use_statement some older records still carry (nothing here creates new
+# ones, but existing ones must still sort last).
 FILE_VERSION_USE_STATEMENT_ORDER = [
     "image-thumbnail",
     "Persistent-URL",
     "Web-Access",
+    "OCFL-Object-Root",
     "OCFL-Object-Inventory",
     "URL-Redirected",
 ]
