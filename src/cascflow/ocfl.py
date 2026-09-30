@@ -23,8 +23,8 @@ def object_root_path(
     (N Tuple Omit Prefix Storage Layout).
 
     Defaults match the extension's own defaults. Caltech Archives' ARK-based
-    configuration uses `delimiter="/"` and `number_of_tuples=2` -- see the
-    distillery repo's OCFL-PRESERVATION-PLAN.md, §3.
+    configuration uses `delimiter="/"` and `number_of_tuples=2` -- see
+    ADR 0002 in the distillery repo.
     """
     if zero_padding not in ("left", "right"):
         raise ValueError(f"zero_padding must be 'left' or 'right': {zero_padding!r}")
