@@ -1,5 +1,9 @@
 # Cascflow Changelog
 
+## Unreleased
+
+- add `docs/decisions/`: the merge/order/relabel contract of `save_digital_object_file_versions()`, the `ocfl` module's write-only scope, and the ARK-derived `digital_object_id` are now recorded as [ADRs](https://adr.github.io/madr/) rather than living only in consumers' documentation
+
 ## 5.0.0
 
 - **Breaking:** the `ABSOLUTE_MOUNT_PARENT` setting is now `SOURCE_MOUNT_PARENT` (`initialize_batch_directory()`, `validate_source_path()`). The old name predates there being any mount besides the source one; the new name says which mount it is, and pairs with Distillery's `PRESERVATION_MOUNT_PARENT`. Every consumer's `settings.ini` has to be updated in step with the version bump
