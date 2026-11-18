@@ -1,7 +1,7 @@
 # 2. Merge `file_versions` by `file_uri`, in a canonical `use_statement` order
 
 - Status: accepted
-- Date: 2026-07-24 (ordering added in 4.4.0; relabelling in 4.5.0)
+- Date: 2026-07-24 (ordering added in 4.4.0; relabelling in 4.5.0; ownership in 5.1.0)
 
 ## Context and Problem Statement
 
@@ -25,9 +25,20 @@ into a **canonical `use_statement` order**.
 
 Incoming entries win for their `file_uri`. An existing entry whose `file_uri`
 is not in the incoming list is **kept but demoted** — `publish: false`,
-`is_representative: false` — rather than deleted. Nothing this library does
-removes a `file_version`: a URL that was once published stays visible to staff
-as a record of what was there.
+`is_representative: false` — rather than deleted, **if the caller owns it**.
+Nothing this library does removes a `file_version`: a URL that was once
+published stays visible to staff as a record of what was there.
+
+Each canonical `use_statement` belongs to the pipeline that writes it, so a
+caller owns an existing entry when:
+
+- its `use_statement` is one the caller is writing in this save, or
+- it has no canonical `use_statement` at all (a hand-entered YouTube link,
+  a share-drive path), which no pipeline owns.
+
+Any other existing entry is another pipeline’s, and comes through exactly as
+it was. Without this, Distillery saving only its `OCFL-Object-Root` demotes
+Alchemist’s published thumbnail, so the public UI shows no image.
 
 ### Order
 

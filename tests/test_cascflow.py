@@ -245,6 +245,142 @@ def test_save_digital_object_file_versions_reorders_into_canonical_use_statement
     ]
 
 
+def test_save_digital_object_file_versions_leaves_another_pipelines_entries_published(
+    monkeypatch,
+):
+    # Distillery runs after Alchemist and passes only its OCFL-Object-Root.
+    # Alchemist's published, representative thumbnail and web-access entries
+    # are not Distillery's to retire, so they must come through untouched.
+    archival_object = {
+        "title": "A Title",
+        "external_ark_url": "https://n2t.net/ark:99999/b3xq7z",
+        "instances": [
+            {
+                "instance_type": "digital_object",
+                "digital_object": {"ref": "/repositories/2/digital_objects/1"},
+            }
+        ],
+    }
+    alchemist_file_versions = [
+        {
+            "file_uri": "https://digital.example.edu/ark:99999/b3xq7z/thumbnail.webp",
+            "use_statement": "image-thumbnail",
+            "publish": True,
+            "is_representative": True,
+            "xlink_show_attribute": "embed",
+        },
+        {
+            "file_uri": "https://n2t.net/ark:99999/b3xq7z",
+            "use_statement": "Persistent-URL",
+            "publish": True,
+        },
+        {
+            "file_uri": "https://digital.example.edu/ark:99999/b3xq7z",
+            "use_statement": "Web-Access",
+            "publish": False,
+        },
+    ]
+    current_digital_object = {
+        "uri": "/repositories/2/digital_objects/1",
+        "file_versions": [dict(fv) for fv in alchemist_file_versions],
+    }
+    monkeypatch.setattr(
+        cascflow_module,
+        "archivesspace_get",
+        lambda uri, params=None: FakeResponse(current_digital_object),
+    )
+    monkeypatch.setattr(
+        cascflow_module, "archivesspace_post", lambda uri, obj: FakeResponse(obj)
+    )
+
+    ocfl_object_root = {
+        "file_uri": "https://vault.example.edu/b3x/q7z/b3xq7z/",
+        "use_statement": "OCFL-Object-Root",
+        "publish": False,
+    }
+    cascflow_module.save_digital_object_file_versions(
+        archival_object, [ocfl_object_root]
+    )
+
+    assert current_digital_object["file_versions"] == [
+        *alchemist_file_versions,
+        ocfl_object_root,
+    ]
+
+
+def test_save_digital_object_file_versions_retires_entries_without_canonical_use_statement(
+    monkeypatch,
+):
+    # Hand-entered links (a YouTube URL, a share-drive path) have no
+    # canonical use_statement and so no owning pipeline; any caller retires
+    # them, while a canonical entry the caller doesn't write is left alone.
+    archival_object = {
+        "title": "A Title",
+        "external_ark_url": "https://n2t.net/ark:99999/b3xq7z",
+        "instances": [
+            {
+                "instance_type": "digital_object",
+                "digital_object": {"ref": "/repositories/2/digital_objects/1"},
+            }
+        ],
+    }
+    current_digital_object = {
+        "uri": "/repositories/2/digital_objects/1",
+        "file_versions": [
+            {
+                "file_uri": "https://www.youtube.com/watch?v=example",
+                "publish": True,
+                "is_representative": True,
+            },
+            {
+                "file_uri": "https://example.org/details/example",
+                "use_statement": "Access copy",
+                "publish": True,
+            },
+            {
+                "file_uri": "https://vault.example.edu/b3x/q7z/b3xq7z/",
+                "use_statement": "OCFL-Object-Root",
+                "publish": False,
+            },
+        ],
+    }
+    monkeypatch.setattr(
+        cascflow_module,
+        "archivesspace_get",
+        lambda uri, params=None: FakeResponse(current_digital_object),
+    )
+    monkeypatch.setattr(
+        cascflow_module, "archivesspace_post", lambda uri, obj: FakeResponse(obj)
+    )
+
+    cascflow_module.save_digital_object_file_versions(
+        archival_object,
+        [
+            {
+                "file_uri": "https://digital.example.edu/ark:99999/b3xq7z/thumbnail.webp",
+                "use_statement": "image-thumbnail",
+                "publish": True,
+                "is_representative": True,
+            },
+        ],
+    )
+
+    by_uri = {
+        fv["file_uri"]: fv for fv in current_digital_object["file_versions"]
+    }
+    for legacy_uri in (
+        "https://www.youtube.com/watch?v=example",
+        "https://example.org/details/example",
+    ):
+        assert by_uri[legacy_uri]["publish"] is False
+        assert by_uri[legacy_uri]["is_representative"] is False
+    assert by_uri["https://vault.example.edu/b3x/q7z/b3xq7z/"] == {
+        "file_uri": "https://vault.example.edu/b3x/q7z/b3xq7z/",
+        "use_statement": "OCFL-Object-Root",
+        "publish": False,
+    }
+
+
 def test_save_digital_object_file_versions_relabels_legacy_web_access_as_url_redirected(
     monkeypatch,
 ):

@@ -162,9 +162,25 @@ def save_digital_object_file_versions(archival_object, new_file_versions):
                 new_file_version["file_uri"]: new_file_version
                 for new_file_version in new_file_versions
             }
+            # Each canonical use_statement belongs to the pipeline that writes
+            # it, so a caller retires only existing entries of a
+            # use_statement it is writing now, plus entries with no canonical
+            # use_statement (hand-entered or pre-pipeline links). Without
+            # this, Distillery saving only its OCFL-Object-Root unpublishes
+            # Alchemist's thumbnail and web-access entries.
+            new_use_statements = {
+                new_file_version.get("use_statement")
+                for new_file_version in new_file_versions
+            }
             # add existing_file_version values to new_file_uri_values if file_uri not already present
             for existing_file_version in existing_file_versions:
-                if existing_file_version["file_uri"] not in new_file_uri_values:
+                if existing_file_version["file_uri"] in new_file_uri_values:
+                    continue
+                existing_use_statement = existing_file_version.get("use_statement")
+                if (
+                    existing_use_statement not in FILE_VERSION_USE_STATEMENT_ORDER
+                    or existing_use_statement in new_use_statements
+                ):
                     existing_file_version["publish"] = False
                     existing_file_version["is_representative"] = False
                     # An image-thumbnail/Web-Access entry whose file_uri doesn't
@@ -179,9 +195,9 @@ def save_digital_object_file_versions(archival_object, new_file_versions):
                         and our_ark not in existing_file_version["file_uri"]
                     ):
                         existing_file_version["use_statement"] = "URL-Redirected"
-                    new_file_uri_values[existing_file_version["file_uri"]] = (
-                        existing_file_version
-                    )
+                new_file_uri_values[existing_file_version["file_uri"]] = (
+                    existing_file_version
+                )
             # discard keys and create list of unique file_version dictionaries
             file_versions = sort_file_versions(list(new_file_uri_values.values()))
             digital_object["digital_object_id"] = our_ark
