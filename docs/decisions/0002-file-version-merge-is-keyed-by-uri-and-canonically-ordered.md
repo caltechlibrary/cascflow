@@ -107,5 +107,5 @@ object, and `publish` to `true`. Publishing is not opt-in.
 - `sort_file_versions()`, `FILE_VERSION_USE_STATEMENT_ORDER`,
   `save_digital_object_file_versions()`.
 - `alchemist/docs/decisions/0002-file-version-conventions-live-in-cascflow.md`
-  and `distillery/docs/decisions/0006-describe-the-object-with-one-file-version-and-a-note.md`
+  and `distillery/docs/decisions/0005-describe-the-object-with-one-file-version-and-a-note.md`
   for how each caller lives with this.

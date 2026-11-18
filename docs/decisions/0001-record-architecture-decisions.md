@@ -12,7 +12,7 @@ until now, the least documented — the README is three lines.
 
 Worse, the decisions cascflow owns were being recorded in its *consumers*.
 Alchemist's ADR 0002 documents this library's `file_version` merge and
-ordering rules from the caller's side; Distillery's ADR 0008 documents why the
+ordering rules from the caller's side; Distillery's ADR 0006 documents why the
 OCFL writer here was hand-rolled rather than taken from a library. Both are
 legitimate — they record what those choices cost each caller — but the
 authority for a shared library's behavior should not be reachable only by

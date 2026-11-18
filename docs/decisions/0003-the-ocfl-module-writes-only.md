@@ -69,6 +69,6 @@ this scope gets revisited with a new ADR.
 
 - `src/cascflow/ocfl.py`: `object_root_path()`, `build_inventory()`,
   `add_version()`, `build_extension_0007_config()`.
-- `distillery/docs/decisions/0008-forward-only-migration-with-a-hand-rolled-ocfl-writer.md`,
+- `distillery/docs/decisions/0006-forward-only-migration-with-a-hand-rolled-ocfl-writer.md`,
   which records the same decision from the consumer's side, and ADR 0002
   there for the layout parameters.

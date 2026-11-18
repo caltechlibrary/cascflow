@@ -64,7 +64,7 @@ Records created before 4.4.0 keep their `component_id`-derived
 using?" depends on when it was last written rather than on any flag.
 
 No migration was performed. That is consistent with Distillery's forward-only
-stance (its ADR 0008), but it does mean an identifier lookup across the whole
+stance (its ADR 0006), but it does mean an identifier lookup across the whole
 repository has to try both forms.
 
 ## More Information
