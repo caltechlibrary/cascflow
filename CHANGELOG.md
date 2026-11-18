@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 5.1.0
+
 - `save_digital_object_file_versions()` demotes an existing `file_version` only when the caller owns it: its `use_statement` is one the caller is writing, or it has no canonical `use_statement`. Another pipeline’s entries come through untouched, so Distillery saving its `OCFL-Object-Root` no longer unpublishes Alchemist’s thumbnail, `Persistent-URL`, and `Web-Access` entries (which hid the thumbnail in the public UI)
 - add `docs/decisions/`: the merge/order/relabel contract of `save_digital_object_file_versions()`, the `ocfl` module's write-only scope, and the ARK-derived `digital_object_id` are now recorded as [ADRs](https://adr.github.io/madr/) rather than living only in consumers' documentation
 
