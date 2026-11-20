@@ -113,8 +113,9 @@ def update_digital_object(uri, data):
 # must lead (ArchivesSpace's representative-image linking in the public UI
 # depends on it); the rest is Caltech convention: Persistent-URL and
 # Web-Access are Alchemist's, OCFL-Object-Root is Distillery's
-# preservation entry, OCFL-Object-Inventory belongs to an inventory.json
-# copy (the audit tool's S3 entry, and older Distillery records), and
+# preservation entry, OCFL-Object-Inventory is assayer's S3 entry (the
+# confirmed version's inventory.json; assayer writes it directly and orders
+# it with sort_file_versions()), and
 # URL-Redirected is a legacy use_statement some older records still carry.
 # A value nothing currently writes still belongs here: the point is to
 # order whatever a record may already carry.
