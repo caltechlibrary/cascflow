@@ -22,9 +22,9 @@ caller decides where bytes go and when. That is what lets Distillery stage a
 version and `os.rename()` it into place — its atomicity requirement, which a
 library that owned the writing could not accommodate.
 
-It lives in cascflow rather than Distillery because it is exactly the kind of
-thing a future audit tool or Alchemist might need, and because it is testable
-without a pipeline around it.
+It lives in cascflow rather than Distillery because more than one consumer
+needs it — assayer derives the same object paths with `object_root_path()` —
+and because it is testable without a pipeline around it.
 
 ## Considered Options
 
@@ -61,9 +61,11 @@ than hard-coding Caltech's, so the module stays general — but a version-paddin
 or tuple-size change after an object exists corrupts its layout, and this
 module cannot detect that. See Distillery's ADR 0002.
 
-Reading an existing object is out of scope, so a consumer that needs it —
-the sync-audit tool, most likely — either parses `inventory.json` itself or
-this scope gets revisited with a new ADR.
+Reading an existing object is out of scope, so a consumer that needs it
+parses `inventory.json` itself. assayer does: it reads the head version’s
+state, the manifest, and the MD5 fixity block directly
+(`assayer.core.head_version_files()`). Moving that reading into this module
+means revisiting this scope with a new ADR.
 
 ## More Information
 

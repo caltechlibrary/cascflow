@@ -5,11 +5,12 @@
 
 ## Context and Problem Statement
 
-Two pipelines write `file_version`s onto the same ArchivesSpace
+Three tools write `file_version`s onto the same ArchivesSpace
 `digital_object`. Alchemist writes web-access entries — thumbnails, the
 persistent URL, the web-access derivative — as objects are published and
 republished. Distillery writes a preservation entry pointing into OCFL
-storage. Neither knows when the other last ran.
+storage. assayer records the S3 copy of that OCFL object once it verifies
+it. None knows when the others last ran.
 
 A naive "replace the list" would mean whichever pipeline ran last erased the
 other's work. A naive "append" would accumulate duplicates and stale entries
@@ -59,6 +60,21 @@ whole decision and the reason the ordering cannot be left to whatever order
 callers happen to pass. Everything after it is Caltech convention —
 Alchemist's entries, then the preservation entries, then retired ones.
 
+### A writer outside the merge
+
+assayer does not call `save_digital_object_file_versions()`. Its one
+`OCFL-Object-Inventory` entry points at the confirmed version’s own
+`inventory.json`, so its `file_uri` changes with every version, and the
+merge’s keep-and-demote rule would leave one demoted S3 entry behind per
+version. Every OCFL entry is already `publish: false`, so a demoted one would
+look the same as the current one.
+
+Instead, assayer replaces its own entry in place, leaves every other entry as
+it was, and orders the list with `sort_file_versions()`, so the ordering
+invariant still has one implementation. The ownership rule keeps the two
+approaches compatible: no other caller writes `OCFL-Object-Inventory`, so
+Distillery’s and Alchemist’s saves leave assayer’s entry untouched.
+
 ### Relabelling
 
 A demoted `image-thumbnail` or `Web-Access` entry whose `file_uri` does **not**
@@ -88,8 +104,9 @@ keeps its original `use_statement`.
 **Callers cannot assume the order they pass is the order stored.** Code written
 as though it can is wrong, even when it happens to work.
 
-**Changing this order changes both pipelines' ArchivesSpace output with no
-change in either repository** — it takes effect when a consumer bumps its pin.
+**Changing this order changes every writer’s ArchivesSpace output with no
+change in any of their repositories** — it takes effect when a consumer bumps
+its pin.
 That happened with 5.0.0, which inserted `OCFL-Object-Root` and so moved
 Distillery's preservation entry from below the retired entries to position 4.
 
@@ -109,3 +126,5 @@ object, and `publish` to `true`. Publishing is not opt-in.
 - `alchemist/docs/decisions/0002-file-version-conventions-live-in-cascflow.md`
   and `distillery/docs/decisions/0005-describe-the-object-with-one-file-version-and-a-note.md`
   for how each caller lives with this.
+- assayer’s `assayer/adapters/archivesspace.py` (`with_s3_inventory_entry()`,
+  `confirm()`) for the writer outside the merge.
