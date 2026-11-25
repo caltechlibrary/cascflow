@@ -1,6 +1,6 @@
 # Cascflow Changelog
 
-## Unreleased
+## 5.2.0
 
 - add `find_accession()`, which finds an accession by its whole identifier (for example `2023-00018-FIC`), since ArchivesSpace’s `find_by_id` has no route for accessions. It checks the search index and, for accessions the index hasn’t reached yet, the accessions modified in the last week, and keeps only candidates whose own identifier matches; `accession_identifier()` joins an accession’s identifier parts
 - add `find_digital_object_uri()`, `create_digital_object_record()`, and `link_digital_object_to_accession()`, for digital objects that belong to an accession rather than an archival object and have no ARK, such as Distillery’s ArchivesIntake backups
