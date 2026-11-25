@@ -1,5 +1,6 @@
 from . import ocfl
 from .cascflow import (
+    ValidationFailed,
     setup_logging,
     update_digital_object,
     save_digital_object_file_versions,
@@ -24,6 +25,11 @@ from .cascflow import (
     archivesspace_get,
     archivesspace_post,
     find_archival_object,
+    accession_identifier,
+    find_accession,
+    find_digital_object_uri,
+    create_digital_object_record,
+    link_digital_object_to_accession,
     enrich_ancestors,
     get_s3_resource_archival_object_paths,
     validate_metadata_identifier,
@@ -40,6 +46,7 @@ from .cascflow import (
 
 __all__ = [
     "ocfl",
+    "ValidationFailed",
     "setup_logging",
     "update_digital_object",
     "save_digital_object_file_versions",
@@ -64,6 +71,11 @@ __all__ = [
     "archivesspace_get",
     "archivesspace_post",
     "find_archival_object",
+    "accession_identifier",
+    "find_accession",
+    "find_digital_object_uri",
+    "create_digital_object_record",
+    "link_digital_object_to_accession",
     "enrich_ancestors",
     "get_s3_resource_archival_object_paths",
     "validate_metadata_identifier",

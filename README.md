@@ -17,4 +17,7 @@ Behavior worth knowing before calling this library:
 - [ADR 0003](docs/decisions/0003-the-ocfl-module-writes-only.md) — the `ocfl`
   module writes and does not read or validate.
 - [ADR 0004](docs/decisions/0004-digital-object-id-derives-from-the-ark.md) —
-  an ARK must be minted before a `digital_object` can be created or updated.
+  an ARK must be minted before a `digital_object` can be created or updated
+  for an archival object. `create_digital_object_record()` creates a
+  `digital_object` exactly as given, for records that have no ARK, such as
+  Distillery’s ArchivesIntake backups.

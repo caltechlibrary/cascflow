@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- add `find_accession()`, which finds an accession by its whole identifier (for example `2023-00018-FIC`), since ArchivesSpace’s `find_by_id` has no route for accessions. It checks the search index and, for accessions the index hasn’t reached yet, the accessions modified in the last week, and keeps only candidates whose own identifier matches; `accession_identifier()` joins an accession’s identifier parts
+- add `find_digital_object_uri()`, `create_digital_object_record()`, and `link_digital_object_to_accession()`, for digital objects that belong to an accession rather than an archival object and have no ARK, such as Distillery’s ArchivesIntake backups
+- add `BagIt-Tag-Manifest` to `FILE_VERSION_USE_STATEMENT_ORDER`, after `OCFL-Object-Inventory`
+- add `ValidationFailed`, a `RuntimeError` for a check that found problems and has already logged them, so a command line can tell it apart from an unexpected error and exit without a traceback
+
 ## 5.1.0
 
 - `save_digital_object_file_versions()` demotes an existing `file_version` only when the caller owns it: its `use_statement` is one the caller is writing, or it has no canonical `use_statement`. Another pipeline’s entries come through untouched, so Distillery saving its `OCFL-Object-Root` no longer unpublishes Alchemist’s thumbnail, `Persistent-URL`, and `Web-Access` entries (which hid the thumbnail in the public UI)

@@ -884,3 +884,269 @@ def test_invalidate_cloudfront_paths_defaults_to_wildcard_when_no_paths_given(
         "Quantity": 1,
         "Items": ["/*"],
     }
+
+
+class FakePostResponse(FakeResponse):
+    def __init__(self, data, status_code=200):
+        super().__init__(data)
+        self.status_code = status_code
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise RuntimeError(f"HTTP {self.status_code}")
+
+
+def fake_accession_api(monkeypatch, search_results, records, recent):
+    """Fake ArchivesSpace for find_accession(): search hits, each record by
+    URI (a missing one returns an error, as for a deleted record), and the
+    accessions listed as recently modified, in pages of two."""
+    requests_made = []
+
+    def fake_archivesspace_get(uri, params=None):
+        requests_made.append((uri, params))
+        if uri == "/repositories/2/search":
+            return FakeResponse({"results": search_results})
+        if uri == "/repositories/2/accessions":
+            page = params["page"]
+            pages = [recent[i : i + 2] for i in range(0, len(recent), 2)] or [[]]
+            return FakeResponse({"results": pages[page - 1], "last_page": len(pages)})
+        return FakeResponse(records.get(uri, {"error": "Accession not found"}))
+
+    monkeypatch.setattr(cascflow_module, "archivesspace_get", fake_archivesspace_get)
+    return requests_made
+
+
+FIC_18 = {
+    "uri": "/repositories/2/accessions/248",
+    "id_0": "2023",
+    "id_1": "00018",
+    "id_2": "FIC",
+    "title": "Found in collection",
+}
+
+
+def test_find_accession_finds_an_indexed_accession(monkeypatch):
+    requests_made = fake_accession_api(
+        monkeypatch,
+        search_results=[{"identifier": "2023-00018-FIC", "uri": FIC_18["uri"]}],
+        records={FIC_18["uri"]: FIC_18},
+        recent=[],
+    )
+
+    assert cascflow_module.find_accession("2023-00018-FIC") == FIC_18
+    search_params = requests_made[0][1]
+    assert search_params["q"] == 'identifier:"2023-00018-FIC"'
+    assert search_params["type[]"] == "accession"
+
+
+def test_find_accession_finds_a_recent_accession_the_index_lacks(monkeypatch):
+    requests_made = fake_accession_api(
+        monkeypatch,
+        search_results=[],
+        records={},
+        recent=[
+            {"uri": "/repositories/2/accessions/1", "id_0": "2023", "id_1": "00017"},
+            {"uri": "/repositories/2/accessions/2", "id_0": "2023", "id_1": "00019"},
+            FIC_18,
+        ],
+    )
+
+    assert cascflow_module.find_accession("2023-00018-FIC") == FIC_18
+    listing_params = [params for uri, params in requests_made if uri.endswith("/accessions")]
+    assert [params["page"] for params in listing_params] == [1, 2]
+    assert all("modified_since" in params for params in listing_params)
+
+
+def test_find_accession_counts_an_accession_found_both_ways_once(monkeypatch):
+    fake_accession_api(
+        monkeypatch,
+        search_results=[{"identifier": "2023-00018-FIC", "uri": FIC_18["uri"]}],
+        records={FIC_18["uri"]: FIC_18},
+        recent=[FIC_18],
+    )
+
+    assert cascflow_module.find_accession("2023-00018-FIC") == FIC_18
+
+
+def test_find_accession_ignores_a_stale_search_hit(monkeypatch):
+    fake_accession_api(
+        monkeypatch,
+        search_results=[
+            {"identifier": "2023-00018-FIC", "uri": "/repositories/2/accessions/9"},
+            {"identifier": "2023-00018-FIC", "uri": FIC_18["uri"]},
+        ],
+        records={FIC_18["uri"]: FIC_18},
+        recent=[],
+    )
+
+    assert cascflow_module.find_accession("2023-00018-FIC") == FIC_18
+
+
+def test_find_accession_needs_the_whole_identifier(monkeypatch):
+    fake_accession_api(
+        monkeypatch,
+        search_results=[{"identifier": "2023-00018-FIC", "uri": FIC_18["uri"]}],
+        records={FIC_18["uri"]: FIC_18},
+        recent=[FIC_18],
+    )
+
+    with pytest.raises(ValueError, match="ACCESSION NOT FOUND: 2023-00018"):
+        cascflow_module.find_accession("2023-00018")
+
+
+def test_find_accession_raises_on_multiple_matches(monkeypatch):
+    twin = dict(FIC_18, uri="/repositories/2/accessions/249")
+    fake_accession_api(
+        monkeypatch,
+        search_results=[{"identifier": "2023-00018-FIC", "uri": FIC_18["uri"]}],
+        records={FIC_18["uri"]: FIC_18},
+        recent=[twin],
+    )
+
+    with pytest.raises(ValueError, match="MULTIPLE ACCESSIONS FOUND"):
+        cascflow_module.find_accession("2023-00018-FIC")
+
+
+def test_accession_identifier_joins_the_filled_parts():
+    assert cascflow_module.accession_identifier(FIC_18) == "2023-00018-FIC"
+    assert cascflow_module.accession_identifier({"id_0": "1995"}) == "1995"
+
+
+def test_find_accession_rejects_a_quote_in_the_identifier():
+    with pytest.raises(ValueError, match="INVALID ACCESSION IDENTIFIER"):
+        cascflow_module.find_accession('2023-00018" OR "x')
+
+
+def test_find_digital_object_uri_returns_the_ref_or_none(monkeypatch):
+    found = {"bag": [{"ref": "/repositories/2/digital_objects/7"}], "missing": []}
+
+    def fake_archivesspace_get(uri, params=None):
+        assert uri == "/repositories/2/find_by_id/digital_objects"
+        return FakeResponse({"digital_objects": found[params["digital_object_id[]"]]})
+
+    monkeypatch.setattr(cascflow_module, "archivesspace_get", fake_archivesspace_get)
+
+    assert cascflow_module.find_digital_object_uri("bag") == "/repositories/2/digital_objects/7"
+    assert cascflow_module.find_digital_object_uri("missing") is None
+
+
+def test_create_digital_object_record_posts_it_as_given(monkeypatch):
+    posted = {}
+
+    def fake_archivesspace_post(uri, obj):
+        posted.update(uri=uri, obj=obj)
+        return FakePostResponse({"status": "Created", "uri": "/repositories/2/digital_objects/9"})
+
+    monkeypatch.setattr(cascflow_module, "archivesspace_post", fake_archivesspace_post)
+    monkeypatch.setattr(cascflow_module, "config", lambda key, default=None: default or "https://example.org/staff")
+    digital_object = {"digital_object_id": "2023-00018__SmithAB", "title": "T", "publish": False}
+
+    uri = cascflow_module.create_digital_object_record(digital_object)
+
+    assert uri == "/repositories/2/digital_objects/9"
+    assert posted == {"uri": "/repositories/2/digital_objects", "obj": digital_object}
+
+
+def test_create_digital_object_record_raises_on_an_error_response(monkeypatch):
+    monkeypatch.setattr(
+        cascflow_module,
+        "archivesspace_post",
+        lambda uri, obj: FakePostResponse(
+            {"error": {"digital_object_id": ["Must be unique"]}}, status_code=400
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="DIGITAL OBJECT NOT CREATED"):
+        cascflow_module.create_digital_object_record({"digital_object_id": "x", "title": "x"})
+
+
+def test_link_digital_object_to_accession_adds_an_instance(monkeypatch):
+    posted = {}
+    monkeypatch.setattr(
+        cascflow_module,
+        "archivesspace_get",
+        lambda uri, params=None: FakeResponse({"uri": uri, "lock_version": 3, "instances": []}),
+    )
+
+    def fake_archivesspace_post(uri, obj):
+        posted.update(uri=uri, obj=obj)
+        return FakePostResponse({"status": "Updated"})
+
+    monkeypatch.setattr(cascflow_module, "archivesspace_post", fake_archivesspace_post)
+
+    added = cascflow_module.link_digital_object_to_accession(
+        "/repositories/2/accessions/248", "/repositories/2/digital_objects/9"
+    )
+
+    assert added is True
+    assert posted["uri"] == "/repositories/2/accessions/248"
+    assert posted["obj"]["lock_version"] == 3
+    assert posted["obj"]["instances"] == [
+        {"instance_type": "digital_object", "digital_object": {"ref": "/repositories/2/digital_objects/9"}}
+    ]
+
+
+def test_link_digital_object_to_accession_skips_an_existing_link(monkeypatch):
+    monkeypatch.setattr(
+        cascflow_module,
+        "archivesspace_get",
+        lambda uri, params=None: FakeResponse(
+            {
+                "uri": uri,
+                "instances": [
+                    {
+                        "instance_type": "digital_object",
+                        "digital_object": {"ref": "/repositories/2/digital_objects/9"},
+                    }
+                ],
+            }
+        ),
+    )
+
+    def fail_post(uri, obj):
+        raise AssertionError("should not post")
+
+    monkeypatch.setattr(cascflow_module, "archivesspace_post", fail_post)
+
+    assert (
+        cascflow_module.link_digital_object_to_accession(
+            "/repositories/2/accessions/248", "/repositories/2/digital_objects/9"
+        )
+        is False
+    )
+
+
+def test_sort_file_versions_places_bagit_tag_manifest_before_legacy_entries():
+    file_versions = [
+        {"use_statement": "URL-Redirected"},
+        {"use_statement": "BagIt-Tag-Manifest"},
+        {"use_statement": "OCFL-Object-Inventory"},
+    ]
+
+    assert [fv["use_statement"] for fv in cascflow_module.sort_file_versions(file_versions)] == [
+        "OCFL-Object-Inventory",
+        "BagIt-Tag-Manifest",
+        "URL-Redirected",
+    ]
+
+
+def test_package_exports_the_accession_helpers():
+    import cascflow
+
+    for name in (
+        "accession_identifier",
+        "find_accession",
+        "find_digital_object_uri",
+        "create_digital_object_record",
+        "link_digital_object_to_accession",
+    ):
+        assert callable(getattr(cascflow, name))
+        assert name in cascflow.__all__
+
+
+def test_validation_failed_is_a_runtime_error_exported_at_the_top_level():
+    import cascflow
+
+    assert issubclass(cascflow.ValidationFailed, RuntimeError)
+    with pytest.raises(RuntimeError, match="NEED REVIEW"):
+        raise cascflow.ValidationFailed("❌ DELIVERIES NEED REVIEW")

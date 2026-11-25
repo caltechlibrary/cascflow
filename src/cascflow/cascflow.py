@@ -21,6 +21,13 @@ from decouple import Csv, Undefined, undefined  # pypi: python-decouple
 _T1 = TypeVar("_T1")
 _T2 = TypeVar("_T2")
 
+
+class ValidationFailed(RuntimeError):
+    """A check of the files, deliveries, or settings found problems, and
+    has already logged each one. They are for an archivist or operator to
+    fix, not a bug, so a command line that catches this can exit with
+    those messages alone rather than a traceback."""
+
 # global config instance - can be overridden by consuming applications
 _config = None
 
@@ -113,9 +120,10 @@ def update_digital_object(uri, data):
 # must lead (ArchivesSpace's representative-image linking in the public UI
 # depends on it); the rest is Caltech convention: Persistent-URL and
 # Web-Access are Alchemist's, OCFL-Object-Root is Distillery's
-# preservation entry, OCFL-Object-Inventory is assayer's S3 entry (the
-# confirmed version's inventory.json; assayer writes it directly and orders
-# it with sort_file_versions()), and
+# preservation entry, OCFL-Object-Inventory is Assayer’s S3 entry (the
+# confirmed version’s inventory.json; Assayer writes it directly and orders
+# it with sort_file_versions()), BagIt-Tag-Manifest is Distillery’s entry
+# for an ArchivesIntake backup bag’s S3 copy, and
 # URL-Redirected is a legacy use_statement some older records still carry.
 # A value nothing currently writes still belongs here: the point is to
 # order whatever a record may already carry.
@@ -125,6 +133,7 @@ FILE_VERSION_USE_STATEMENT_ORDER = [
     "Web-Access",
     "OCFL-Object-Root",
     "OCFL-Object-Inventory",
+    "BagIt-Tag-Manifest",
     "URL-Redirected",
 ]
 
@@ -664,6 +673,154 @@ def find_archival_object(component_id):
         logger.debug(f"🐞 ARCHIVAL OBJECT FOUND: {component_id}")
         return archival_object
 
+
+
+# How far back find_accession() looks in the database for accessions the
+# search index may not have caught up with yet.
+RECENT_ACCESSION_SECONDS = 7 * 24 * 60 * 60
+
+
+def accession_identifier(accession: dict) -> str:
+    """Return an accession’s identifier as ArchivesSpace displays it: its
+    filled parts joined with hyphens, for example "2023-00018-FIC"."""
+    return "-".join(
+        accession[part]
+        for part in ("id_0", "id_1", "id_2", "id_3")
+        if accession.get(part)
+    )
+
+
+def find_accession(
+    identifier: str, recent_seconds: int = RECENT_ACCESSION_SECONDS
+) -> dict:
+    """Return the accession whose identifier, its parts joined with hyphens
+    as ArchivesSpace displays it, is exactly `identifier`, for example
+    "2023-00018-FIC". "2023-00018" doesn’t find "2023-00018-FIC".
+
+    ArchivesSpace’s find_by_id has no route for accessions, so candidates
+    come from two places: the search index, and the database’s list of
+    accessions modified in the last `recent_seconds`, which finds a new
+    accession the index hasn’t reached yet. Each candidate is fetched and
+    kept only if its own identifier matches, so a search hit for a deleted
+    or renumbered accession doesn’t count.
+
+    Raises a ValueError if no accession or more than one matches.
+    """
+    if '"' in identifier or "\\" in identifier:
+        raise ValueError(f"❌ INVALID ACCESSION IDENTIFIER: {identifier!r}")
+    repository_id = config("ARCHIVESSPACE_REPOSITORY_ID", default="2")
+    matches: dict[str, dict] = {}
+
+    response = archivesspace_get(
+        f"/repositories/{repository_id}/search",
+        params={
+            "q": f'identifier:"{identifier}"',
+            "type[]": "accession",
+            "page": 1,
+            "page_size": 10,
+        },
+    )
+    response.raise_for_status()
+    for result in response.json()["results"]:
+        if result.get("identifier") != identifier or result["uri"] in matches:
+            continue
+        accession = archivesspace_get(result["uri"]).json()
+        if "error" not in accession and accession_identifier(accession) == identifier:
+            matches[accession["uri"]] = accession
+
+    modified_since = int(time.time()) - recent_seconds
+    page = 1
+    while True:
+        response = archivesspace_get(
+            f"/repositories/{repository_id}/accessions",
+            params={"page": page, "page_size": 250, "modified_since": modified_since},
+        )
+        response.raise_for_status()
+        listing = response.json()
+        for accession in listing["results"]:
+            if accession_identifier(accession) == identifier:
+                matches.setdefault(accession["uri"], accession)
+        if page >= listing.get("last_page", 1):
+            break
+        page += 1
+
+    if len(matches) < 1:
+        raise ValueError(f"❌ ACCESSION NOT FOUND: {identifier}")
+    if len(matches) > 1:
+        raise ValueError(
+            f"❌ MULTIPLE ACCESSIONS FOUND: {identifier} ({', '.join(sorted(matches))})"
+        )
+    logger.debug(f"🐞 ACCESSION FOUND: {identifier}")
+    return next(iter(matches.values()))
+
+
+def find_digital_object_uri(digital_object_id: str) -> str | None:
+    """Return the URI of the digital_object whose digital_object_id is
+    `digital_object_id`, or None if there is none."""
+    repository_id = config("ARCHIVESSPACE_REPOSITORY_ID", default="2")
+    response = archivesspace_get(
+        f"/repositories/{repository_id}/find_by_id/digital_objects",
+        params={"digital_object_id[]": digital_object_id},
+    )
+    response.raise_for_status()
+    refs = [match["ref"] for match in response.json()["digital_objects"]]
+    if len(refs) > 1:
+        raise ValueError(
+            f"❌ MULTIPLE DIGITAL OBJECTS FOUND: {digital_object_id} ({', '.join(refs)})"
+        )
+    return refs[0] if refs else None
+
+
+def create_digital_object_record(digital_object: dict) -> str:
+    """Create `digital_object` exactly as given and return its URI.
+
+    Unlike create_digital_object(), this derives nothing and links the new
+    record to nothing: the caller supplies digital_object_id, title, and
+    every other field, and links it where it belongs (for example with
+    link_digital_object_to_accession()).
+    """
+    repository_id = config("ARCHIVESSPACE_REPOSITORY_ID", default="2")
+    response = archivesspace_post(
+        f"/repositories/{repository_id}/digital_objects", digital_object
+    )
+    body = response.json()
+    if "error" in body:
+        raise RuntimeError(
+            f"❌ DIGITAL OBJECT NOT CREATED: {digital_object.get('digital_object_id')}: {body['error']}"
+        )
+    response.raise_for_status()
+    logger.info(
+        f"✳️ DIGITAL OBJECT CREATED: [{digital_object.get('title')}]({str(config('ARCHIVESSPACE_STAFF_URL')).rstrip('/')}/resolve/readonly?uri={body['uri']})"
+    )
+    return body["uri"]
+
+
+def link_digital_object_to_accession(accession_uri: str, digital_object_uri: str) -> bool:
+    """Add a digital_object instance for `digital_object_uri` to the
+    accession, unless it already has one, and return whether it added one.
+
+    Fetches the accession itself, so the save carries its current
+    lock_version.
+    """
+    accession = archivesspace_get(accession_uri).json()
+    instances = accession.setdefault("instances", [])
+    if any(
+        instance.get("digital_object", {}).get("ref") == digital_object_uri
+        for instance in instances
+    ):
+        return False
+    instances.append(
+        {"instance_type": "digital_object", "digital_object": {"ref": digital_object_uri}}
+    )
+    response = archivesspace_post(accession_uri, accession)
+    body = response.json()
+    if "error" in body:
+        raise RuntimeError(
+            f"❌ ACCESSION NOT UPDATED: {accession_uri}: {body['error']}"
+        )
+    response.raise_for_status()
+    logger.debug(f"☑️  ACCESSION LINKED TO DIGITAL OBJECT: {accession_uri}")
+    return True
 
 def enrich_ancestors(archival_object: dict) -> dict:
     """Resolve each ancestor's own linked_agents and subjects inline.
